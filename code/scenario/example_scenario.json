@@ -1,0 +1,27 @@
+{
+	"scenario_type": "speaker_no_noise",
+	"duration_samples": 160000,
+	"target_speaker": {
+		"wav_path": "relative/to/some/common/data/path/speech/speaker_chapter_1.wav",
+		"volume": 1.0,
+		"seat": 5,
+		"delay_samples": 0,
+		"duration_samples": 160000
+	},
+	"other_sources": [
+		{
+			"wav_path": "relative/to/some/common/data/path/speech/speaker_chapter_2.wav",
+			"volume": 0.8,
+			"seat": 1,
+			"delay_samples": 16000,
+			"duration_samples": 48000
+		},
+		{
+			"wav_path": "relative/to/some/common/data/path/noise/ventilation_noise.wav",
+			"volume": 0.3,
+			"seat": 7,
+			"delay_samples": 0,
+			"duration_samples": 160000
+		}
+	]
+}
