@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
-simple_meeting_rir.py — minimal, hackable RIR generator for a meeting-room array.
-
-Edit the CONFIG section below, then run:
-    python3 simple_meeting_rir.py
-
-Requires: numpy, pyroomacoustics
-Outputs: ./out/rir_static/seatXX_micYY.npy
-"""
-
 import numpy as np
 import tqdm
 import pyroomacoustics as pra
@@ -166,10 +156,14 @@ def main():
 
     room.compute_rir()
     S = len(room.sources)
-    for i,m in tqdm.tqdm(list(itertools.product(range(S), range(M)))):
-        rir = np.asarray(room.rir[m][i], dtype=float)
-        np.save(OUT_DIR / f"seat{i:02d}_mic{m:02d}.npy", rir)
-        if GEN_DEBUG_PLOTS:
+    for i in range(S):
+        rir_list = [room.rir[m][i] for m in range(M)]
+        rir = np.asarray(rir_list, dtype=float).T
+        np.save(OUT_DIR / f"seat{i:02d}.npy", rir)
+
+    if GEN_DEBUG_PLOTS:
+        for i,m in tqdm.tqdm(list(itertools.product(range(S), range(M)))):
+            rir = np.asarray(room.rir[m][i], dtype=float)
             plot_ir_debug(room, FS, seat_idx=i, mic_idx=m, early_ms=80, headless=True)
     print(f"Done. Files in: {OUT_DIR.resolve()}")
 
