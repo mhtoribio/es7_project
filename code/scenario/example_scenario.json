@@ -1,27 +1,34 @@
 {
-	"scenario_type": "speaker_no_noise",
+	"scenario_type": "speaker_and_noise_and_interference",
+	"scenario_id": "c5bb1bec91d04c18b59365dfa16033da",
 	"duration_samples": 160000,
 	"target_speaker": {
-		"wav_path": "relative/to/some/common/data/path/speech/speaker_chapter_1.wav",
+		"wav_path": "speech/book_09703_chp_0036_reader_08986_26_seg_1.wav",
 		"volume": 1.0,
 		"seat": 5,
 		"delay_samples": 0,
-		"duration_samples": 160000
+		"duration_samples": 160000,
+		"decimation": 3,
+		"interpolation": 1
 	},
 	"other_sources": [
 		{
-			"wav_path": "relative/to/some/common/data/path/speech/speaker_chapter_2.wav",
+			"wav_path": "speech/book_09703_chp_0036_reader_08986_26_seg_1.wav",
 			"volume": 0.8,
 			"seat": 1,
 			"delay_samples": 16000,
-			"duration_samples": 48000
+			"duration_samples": 48000,
+			"decimation": 3,
+			"interpolation": 1
 		},
 		{
-			"wav_path": "relative/to/some/common/data/path/noise/ventilation_noise.wav",
+			"wav_path": "speech/book_09703_chp_0036_reader_08986_26_seg_1.wav",
 			"volume": 0.3,
 			"seat": 7,
 			"delay_samples": 0,
-			"duration_samples": 160000
+			"duration_samples": 160000,
+			"decimation": 3,
+			"interpolation": 1
 		}
 	]
 }

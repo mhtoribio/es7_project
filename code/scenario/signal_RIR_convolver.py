@@ -7,19 +7,6 @@ from math import gcd
 import os
 from pathlib import Path
 
-parser = argparse.ArgumentParser()
-parser.add_argument("rir_dir")
-parser.add_argument("input_file")
-parser.add_argument("output_dir")
-parser.add_argument("--FS", default=16000, type=int)
-args = parser.parse_args()
-
-FS = args.FS
-RIR_DIR = Path(args.rir_dir)
-OUT_DIR = Path(args.output_dir)
-valid_seats = [i for i in range(8)]
-valid_mics  = [i for i in range(8)]
-
 def simulate_mic_from_rir(x, rir):
     """
     x: numpy array for input (N,) shape
@@ -43,7 +30,7 @@ def normalize_and_downsample(x, fs_in, fs_out):
     # polyphase lowpass+resample; good quality and no “rate lying”
     return resample_poly(x_normalized, up=p, down=q)
 
-def rir_convolve_file_to_fs(input_file, rir_files: list, out_file):
+def rir_convolve_file_to_fs(input_file, rir_files: list, out_file, FS=16000):
     # Read speech input
     fs_recording, x_int16 = wavfile.read(input_file)
 
@@ -76,6 +63,19 @@ def output_filename(input_filename, seat):
     return f"{os.path.splitext(p.name)[0]}_seat{seat}.wav"
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("rir_dir")
+    parser.add_argument("input_file")
+    parser.add_argument("output_dir")
+    parser.add_argument("--FS", default=16000, type=int)
+    args = parser.parse_args()
+
+    FS = args.FS
+    RIR_DIR = Path(args.rir_dir)
+    OUT_DIR = Path(args.output_dir)
+    valid_seats = [i for i in range(8)]
+    valid_mics  = [i for i in range(8)]
+
     for seat in valid_seats:
         out_file = OUT_DIR / output_filename(args.input_file, seat)
         print(out_file)
