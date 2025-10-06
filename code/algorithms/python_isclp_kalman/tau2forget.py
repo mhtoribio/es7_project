@@ -11,6 +11,8 @@
 # Output:
 # forget:   forgetting factor    
 
+# --------------------
+
 import numpy as np
 
 def tau2forget(tau, R_STFT, fs):            

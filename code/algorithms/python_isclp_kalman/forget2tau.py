@@ -11,6 +11,8 @@
 # Output:
 # tau:      time constant    
 
+# --------------------
+
 import numpy as np
 
 def forget2tau(forget, R_STFT, fs):            

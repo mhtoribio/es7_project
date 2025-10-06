@@ -11,6 +11,8 @@
 # Psi_x_smth:   smooth correlation matrix estimate - freqbins x frames x channels x channels
 # Psi_x_mean:   mean correlation matrix estimate - freqbins x 1 x channels x channels
 
+# ----------------------
+
 import numpy as np
 
 def estim_corrmat(X, alpha):

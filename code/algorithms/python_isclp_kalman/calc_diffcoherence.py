@@ -14,8 +14,10 @@
 # OUTPUT:
 # Gamma:     diffuse coherence matrix - freqbins x 1 x channels x channels
 
+# ---------------------------
+
 import numpy as np
-from scipy.special 
+from scipy.special import j0 
 
 def calc_diff_coherence(micPos, N_STFT, fs, c, reg, type='spherical'):
     
@@ -32,12 +34,14 @@ def calc_diff_coherence(micPos, N_STFT, fs, c, reg, type='spherical'):
             if type == 'spherical':
                 Gamma[:, 0, m_out, m_in] = np.sinc(2*f*d/c)
             elif type == 'cylindrical':
-                Gamma[:, 0, m_out, m_in] = besselj(0, 2*np.pi*f*d/c)
+                Gamma[:, 0, m_out, m_in] = j0(2*np.pi*f*d/c)
             else:
                 raise ValueError("type must be 'spherical' or 'clyndrical'")
             Gamma[:, 0, m_out, m_in] = Gamma[:, 0, m_out, m_in]
     
     return Gamma
+
+
 
 
 
