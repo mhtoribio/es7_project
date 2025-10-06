@@ -116,29 +116,23 @@ def run(cfg: Config) -> int:
     if cfg.debug_data_dir is not None:
         logging.info("Will write intermediate outputs to debug files")
 
+#we assume that since only one scenario it is the same for distant and enhanced
     if cfg.scenario_file:
         logging.info(f"Running single scenario mode")
         #add different funciton todo
+        
+#since multiple scenarios we have to iterate for each of them
     elif cfg.scenario_dir:
         logging.info(f"Running multiple scenario mode")
         for sfile in iter_scenarios(cfg.scenario_dir):
             #add different fucntion todo
-
-    if cfg.distant_file:
-        logging.info(f"Running single distant mode")
-        #add different funciton todo
-    elif cfg.distant_dir:
-        logging.info(f"Running multiple distant mode")
+            pass
         for dfile in iter_wav_file(cfg.distant_dir):
             #add different fucntion todo
-
-    if cfg.enhanced_speech_file:
-        logging.info(f"Running single enhanced mode")
-        #add function todo
-    elif cfg.enhanced_speech_dir:
-        logging.info(f"Running multiple enhanced speech mode")
+            pass
         for wfile in iter_wav_file(cfg.enhanced_speech_dir):
             #add function
+            pass    
         
     return 0
 
@@ -164,19 +158,19 @@ def load_clean_ref(cfg: Config, scenario: Path):
 
     # Construct full path to the clean reference file
     logging.debug(f"Processing clean speech ref from {scenario}")
-    clean_ref = cfg.clean_data_dir / wav_path
+    clean_wav = cfg.clean_data_dir / wav_path
 
-    if not clean_ref.is_file():
-        raise FileNotFoundError(clean_ref)
+    if not clean_wav.is_file():
+        raise FileNotFoundError(clean_wav)
 
     
     logging.debug(f"Processing enhanced speech from scenario {scenario}")
-    distant_ref = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
+    distant_wav = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
 
     logging.debug(f"Processing enhanced speech from scenario {scenario}")
-    enhanced_speech_ref = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
+    enhanced_speech_wav = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
     
-    return clean_ref, distant_ref, enhanced_speech_ref
+    return clean_wav, distant_wav, enhanced_speech_wav
 
 # compute PESQ (how good sound) (with reference)
 
