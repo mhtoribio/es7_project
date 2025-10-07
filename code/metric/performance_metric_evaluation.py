@@ -10,6 +10,7 @@ from scipy.io import wavfile
 from scipy.signal import resample_poly
 from pystoi import stoi
 import sounddevice as sd
+from srmrpy import srmr
 
 # ---------- CLI ----------
 
@@ -204,9 +205,7 @@ def prepare_wav_files(cfg: Config, source_spec: dict, noisy: Path) -> tuple[np.n
 
     return x, noisy
 
-# compute STOI (intelligence how good u can understand)(with ref)
-def e_stoi(cfg: Config, clean: np.ndarray, noisy: np.ndarray):
-    
+def stereo_to_mono(clean: np.ndarray, noisy: np.ndarray):
     # Convert to mono if stereo
     if clean.ndim > 1:
         logging.debug(f'Converting clean stereo to mono')
@@ -214,11 +213,14 @@ def e_stoi(cfg: Config, clean: np.ndarray, noisy: np.ndarray):
     if noisy.ndim > 1:
         logging.debug(f'Converting noisy stereo to mono')        
         noisy = noisy[:,0] # choose mic 0
+    
+    return clean, noisy
 
-    # Compute eSTOI
-    estoi_score = stoi(clean, noisy, cfg.fs, extended=True)
+# Compute DNSMOS (1-10) 10 good
 
-    return estoi_score
+# Compute PESQ
+
+# Convert to .txt file
 
 def process_one_scenario(cfg: Config, scenario: Path):
     
@@ -235,12 +237,23 @@ def process_one_scenario(cfg: Config, scenario: Path):
     clean_enhanced_wav, enhanced_wav = prepare_wav_files(cfg, scen["target_speaker"], enhanced_path)
     logging.debug(f'Both distant and enhanced scenario are prepared')
 
+    # stereo to mono
+    clean_distant_mono, distant_mono   = stereo_to_mono(clean_distant_wav, distant_wav)
+    clean_enhanced_mono, enhanced_mono = stereo_to_mono(clean_enhanced_wav, enhanced_wav)
+
     # E-STOI metric
     logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
-    estoi_score_distant  = e_stoi(cfg, clean_distant_wav, distant_wav)
-    estoi_score_enhanced = e_stoi(cfg, clean_enhanced_wav, enhanced_wav)
-    print(f'Distant score is: {estoi_score_distant}')
-    print(f'Enhance score is: {estoi_score_enhanced}')
+    estoi_score_distant  = stoi(clean_distant_mono, distant_mono, cfg.fs, extended=True)
+    estoi_score_enhanced = stoi(clean_enhanced_mono, enhanced_mono, cfg.fs, extended=True)
+    print(f'Distant E-STOI score is: {estoi_score_distant}')
+    print(f'Enhance E-STOI score is: {estoi_score_enhanced}')
+
+    # SRMR metric
+    logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
+    srmr_score_distant, _  = srmr(distant_mono, cfg.fs, fast=True)  # We tried with mono and wav, they give same result. Also try with stereo 
+    srmr_score_enhanced, _ = srmr(enhanced_mono, cfg.fs, fast=True)
+    print(f'Distant SRMR score is: {srmr_score_distant}')
+    print(f'Enhance SRMR score is: {srmr_score_enhanced}')
 
     ''' Playing Sound
     sd.play(clean_distant_wav, cfg.fs)
@@ -262,6 +275,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
 
