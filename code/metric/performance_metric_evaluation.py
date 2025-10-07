@@ -1,16 +1,14 @@
 import argparse
-import wave
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 import logging
 import json
 import os
-from pprint import pprint
 import numpy as np
 from scipy.io import wavfile
-from scipy.signal import fftconvolve, resample_poly
-from functools import lru_cache
+from scipy.signal import resample_poly
+from pystoi import stoi
 
 # ---------- CLI ----------
 
@@ -116,23 +114,16 @@ def run(cfg: Config) -> int:
     if cfg.debug_data_dir is not None:
         logging.info("Will write intermediate outputs to debug files")
 
-#we assume that since only one scenario it is the same for distant and enhanced
+    #we assume that since only one scenario it is the same for distant and enhanced
     if cfg.scenario_file:
         logging.info(f"Running single scenario mode")
-        #add different funciton todo
+        process_one_scenario(cfg, cfg.scenario_file)
         
-#since multiple scenarios we have to iterate for each of them
+    #since multiple scenarios we have to iterate for each of them
     elif cfg.scenario_dir:
         logging.info(f"Running multiple scenario mode")
         for sfile in iter_scenarios(cfg.scenario_dir):
-            #add different fucntion todo
-            pass
-        for dfile in iter_wav_file(cfg.distant_dir):
-            #add different fucntion todo
-            pass
-        for wfile in iter_wav_file(cfg.enhanced_speech_dir):
-            #add function
-            pass    
+            process_one_scenario(cfg, sfile)
         
     return 0
 
@@ -143,40 +134,122 @@ def iter_wav_file(wav_dir: Path):
     yield from sorted(wav_dir.glob("*.wav"))
 
 # load clean speech for reference
-def load_clean_ref(cfg: Config, scenario: Path):
-    logging.info(f"Loading wav files from clean, distant and enhanced speech from {scenario}")
+def load_wav_path(cfg: Config, scen: dict):
+    
+    # Extract the target speaker spec
+    scenario_type = scen["scenario_type"]
+    scenario_id = scen["scenario_id"]
+    #target_spec = scen["target_speaker"]
+    #wav_path = target_spec["wav_path"]
+
+    # Construct full path to the clean reference file
+    #logging.debug(f"Processing clean speech ref from {scenario}")
+    #clean_wav = cfg.clean_data_dir / wav_path
+
+    #if not clean_wav.is_file():
+    #    raise FileNotFoundError(clean_wav)
+
+    logging.debug(f"Processing enhanced speech from the scenario")
+    distant_wav = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
+
+    logging.debug(f"Processing enhanced speech from the scenario")
+    enhanced_speech_wav = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
+    
+    return distant_wav, enhanced_speech_wav
+
+def load_and_resample_source(cfg: Config, source_spec: dict) -> np.ndarray:
+    """
+    Loads, normalizes, and resamples source file according to spec JSON object.
+    Assumes spec has been validated.
+    """
+    fs, x = wavfile.read(cfg.clean_data_dir / source_spec["wav_path"])
+    logging.debug(f"Read wavfile with {fs=} and {x.shape=}")
+    decimation = source_spec["decimation"]
+    interpolation = source_spec["interpolation"]
+    x_normalized = (0.99 / (np.max(np.abs(x)) + 1e-12)) * x
+    x_resampled = resample_poly(x_normalized, interpolation, decimation)
+    logging.debug(f"Resampled wavfile with {decimation=} and {interpolation=} from {fs} to {fs*interpolation//decimation} ({x_resampled.shape=})")
+    return x_resampled
+
+def prepare_wav_files(cfg: Config, source_spec: dict, noisy: Path) -> tuple[np.ndarray, int]:
+    """
+    Loads wav source and processes it according to spec.
+    Returns: (signal to mix, seat index)
+    """
+    
+    # load clean, distant and enhanced
+    x = load_and_resample_source(cfg, source_spec)
+    fs_noisy, noisy = wavfile.read(noisy)
+    logging.info(f'Loading clean={x} and {noisy=} wav file')
+
+    # ensure lengths are the same
+    if len(x) != len(noisy):
+        logging.debug(f'Ensure length of clean and noisy are the same')        
+        x_padded = np.zeros(len(noisy))
+        x_padded[:len(x)] = x            # copy original x into the beginning
+
+    return x_padded, noisy
+
+# compute STOI (intelligence how good u can understand)(with ref)
+def e_stoi(cfg: Config, clean_ref: np.ndarray, noisy: np.ndarray):
+    
+    # Convert to mono if stereo
+    if clean.ndim > 1:
+        logging.debug(f'Converting clean stereo to mono')
+        clean = clean[:,0] # choose mic 0
+    if noisy.ndim > 1:
+        logging.debug(f'Converting noisy stereo to mono')        
+        noisy = noisy[:,0] # choose mic 0
+
+    # Compute eSTOI
+    estoi_score = stoi(clean, noisy, cfg.fs, extended=True)
+
+    return estoi_score
+
+def process_one_scenario(cfg: Config, scenario: Path):
     
     # Load the JSON scenario file
     with open(scenario) as f:
         scen = json.load(f)
-    
-    # Extract the target speaker spec
-    target_spec = scen["target_speaker"]
-    scenario_type = scen["scenario_type"]
-    scenario_id = scen["scenario_id"]
-    wav_path = target_spec["wav_path"]
 
-    # Construct full path to the clean reference file
-    logging.debug(f"Processing clean speech ref from {scenario}")
-    clean_wav = cfg.clean_data_dir / wav_path
+    # find wav path for distant and enhanced
+    logging.info(f"Loading wav path from distant and enhanced speech from {scenario}")
+    distant_path, enhanced_path = load_wav_path(cfg, scen)
 
-    if not clean_wav.is_file():
-        raise FileNotFoundError(clean_wav)
+    # prepare, clean and noisy from same scenario
+    clean_distant_wav, distant_wav   = prepare_wav_files(cfg, scen, distant_path)
+    clean_enhanced_wav, enhanced_wav = prepare_wav_files(cfg, scen, enhanced_path)
+    logging.debug(f'Both distant and enhanced scenario are prepared')
 
-    
-    logging.debug(f"Processing enhanced speech from scenario {scenario}")
-    distant_wav = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
+    # E-STOI metric
+    logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
+    estoi_score_distant  = e_stoi(cfg, clean_distant_wav, distant_wav)
+    estoi_score_enhanced = e_stoi(cfg, clean_enhanced_wav, enhanced_wav)
 
-    logging.debug(f"Processing enhanced speech from scenario {scenario}")
-    enhanced_speech_wav = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
-    
-    return clean_wav, distant_wav, enhanced_speech_wav
+# ---------- Entrypoint ----------
 
-# compute PESQ (how good sound) (with reference)
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    cfg = make_config(args)
+    return run(cfg)
 
-# compute DNSMOS (ai mos) (no ref)
+if __name__ == "__main__":
+    sys.exit(main())
 
-# compute SRMR (dereverb)
 
-# compute STOI (intelligence how good u can understand)(with ref)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
