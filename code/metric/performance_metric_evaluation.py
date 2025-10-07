@@ -9,6 +9,7 @@ import numpy as np
 from scipy.io import wavfile
 from scipy.signal import resample_poly
 from pystoi import stoi
+import sounddevice as sd
 
 # ---------- CLI ----------
 
@@ -149,11 +150,23 @@ def load_wav_path(cfg: Config, scen: dict):
     #if not clean_wav.is_file():
     #    raise FileNotFoundError(clean_wav)
 
+    # Determine distant wav path
     logging.debug(f"Processing enhanced speech from the scenario")
-    distant_wav = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
+    if cfg.distant_dir is not None:
+        distant_wav = cfg.distant_dir / f"{scenario_type}_{scenario_id}_distant.wav"
+    elif cfg.distant_file is not None:
+        distant_wav = cfg.distant_file
+    else:
+        raise ValueError("No distant path provided in config")
 
+    # Determine enhanced wav path
     logging.debug(f"Processing enhanced speech from the scenario")
-    enhanced_speech_wav = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
+    if cfg.enhanced_speech_dir is not None:
+        enhanced_speech_wav = cfg.enhanced_speech_dir / f"{scenario_type}_{scenario_id}_enhanced.wav"
+    elif cfg.enhanced_speech_file is not None:
+        enhanced_speech_wav = cfg.enhanced_speech_file
+    else:
+        raise ValueError("No enhanced speech path provided in config")
     
     return distant_wav, enhanced_speech_wav
 
@@ -187,11 +200,12 @@ def prepare_wav_files(cfg: Config, source_spec: dict, noisy: Path) -> tuple[np.n
         logging.debug(f'Ensure length of clean and noisy are the same')        
         x_padded = np.zeros(len(noisy))
         x_padded[:len(x)] = x            # copy original x into the beginning
+        x = x_padded
 
-    return x_padded, noisy
+    return x, noisy
 
 # compute STOI (intelligence how good u can understand)(with ref)
-def e_stoi(cfg: Config, clean_ref: np.ndarray, noisy: np.ndarray):
+def e_stoi(cfg: Config, clean: np.ndarray, noisy: np.ndarray):
     
     # Convert to mono if stereo
     if clean.ndim > 1:
@@ -217,14 +231,27 @@ def process_one_scenario(cfg: Config, scenario: Path):
     distant_path, enhanced_path = load_wav_path(cfg, scen)
 
     # prepare, clean and noisy from same scenario
-    clean_distant_wav, distant_wav   = prepare_wav_files(cfg, scen, distant_path)
-    clean_enhanced_wav, enhanced_wav = prepare_wav_files(cfg, scen, enhanced_path)
+    clean_distant_wav, distant_wav   = prepare_wav_files(cfg, scen["target_speaker"], distant_path)
+    clean_enhanced_wav, enhanced_wav = prepare_wav_files(cfg, scen["target_speaker"], enhanced_path)
     logging.debug(f'Both distant and enhanced scenario are prepared')
 
     # E-STOI metric
     logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
     estoi_score_distant  = e_stoi(cfg, clean_distant_wav, distant_wav)
     estoi_score_enhanced = e_stoi(cfg, clean_enhanced_wav, enhanced_wav)
+    print(f'Distant score is: {estoi_score_distant}')
+    print(f'Enhance score is: {estoi_score_enhanced}')
+
+    ''' Playing Sound
+    sd.play(clean_distant_wav, cfg.fs)
+    sd.wait()  # wait until playback is finished
+    sd.play(distant_wav, cfg.fs)
+    sd.wait()  # wait until playback is finished
+    sd.play(clean_enhanced_wav, cfg.fs)
+    sd.wait()  # wait until playback is finished
+    sd.play(enhanced_wav, cfg.fs)
+    sd.wait()  # wait until playback is finished
+    '''
 
 # ---------- Entrypoint ----------
 
@@ -235,21 +262,6 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
