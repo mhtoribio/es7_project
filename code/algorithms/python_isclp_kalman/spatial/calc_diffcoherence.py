@@ -19,14 +19,14 @@
 import numpy as np
 from scipy.special import j0 
 
-def calc_diff_coherence(micPos, N_STFT, fs, c, reg, type='spherical'):
+def calc_diffcoherence(micPos, N_STFT, fs, c, reg, type='spherical'):
     
     # frequency vector
     N_STFT_half = N_STFT // 2 + 1
     f = np.linspace(0, fs/2, N_STFT_half)
     
     M = micPos.shape[0]
-    Gamma = (1 + reg) * np.ones((N_STFT, 1, M, M))
+    Gamma = (1 + reg) * np.ones((N_STFT_half, 1, M, M))
 
     for m_out in range(M-1):
         for m_in in range(m_out+1, M):
@@ -40,23 +40,3 @@ def calc_diff_coherence(micPos, N_STFT, fs, c, reg, type='spherical'):
             Gamma[:, 0, m_out, m_in] = Gamma[:, 0, m_out, m_in]
     
     return Gamma
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
