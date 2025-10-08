@@ -1,3 +1,4 @@
 out/
 *.sif
 **/__pycache__
+**/*.pstats
