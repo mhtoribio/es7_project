@@ -195,7 +195,9 @@ def solve_sqrtMP(
             eps_phi_s_rel_it[it] = float((e @ e) / denom)
 
         # T = (sqrtPsi_xe)^H * H_hat * diag(sqrtphi_s_hat)
-        T = sqrtPsi_xe.conj().T @ H_hat @ np.diag(sqrtphi_s_hat)
+        # T = sqrtPsi_xe.conj().T @ H_hat @ np.diag(sqrtphi_s_hat)
+        H_scaled = H_hat * sqrtphi_s_hat[None, :]           # (M, N)
+        T = sqrtPsi_xe.conj().T @ H_scaled                  # (N, N)
 
         # Procrustes: Omega_hat = U * V^H
         U, _, Vh = np.linalg.svd(T, full_matrices=False)
@@ -205,12 +207,17 @@ def solve_sqrtMP(
         sqrtphi_old = sqrtphi_s_hat.copy()
 
         # numerator: diag(H^H sqrtPsi_xe Omega) + alpha * (Omega^H sqrtPsi_xe[0,:]^H)
-        term1 = np.diag(H_hat.conj().T @ sqrtPsi_xe @ Omega_hat)           # (N,)
+        # term1 = np.diag(H_hat.conj().T @ sqrtPsi_xe @ Omega_hat)           # (N,)
+        # diag(H^H @ sqrtPsi_xe @ Omega) without forming the full product:
+        X = sqrtPsi_xe @ Omega_hat                          # (M, N)
+        term1 = np.sum(H_hat.conj() * X, axis=0)            # (N,)
         term2 = Omega_hat.conj().T @ sqrtPsi_xe[0, :].conj()               # (N,)
         num = term1 + alpha * term2
 
         # denominator: diag(H^H H) + alpha * 1
-        den = np.diag(H_hat.conj().T @ H_hat) + alpha * np.ones(N)
+        # den = np.diag(H_hat.conj().T @ H_hat) + alpha * np.ones(N)
+        # diag(H^H H) is just column norms squared:
+        den = np.sum(H_hat.conj() * H_hat, axis=0).real + alpha
 
         sqrtphi_s_hat = num / den
 
