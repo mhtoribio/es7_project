@@ -302,6 +302,7 @@ def process_one_scenario(cfg: Config, scenario: Path):
         print(f'Distant DNSMOS overall score: {dnsmos_score_distant['ovrl_mos']}, speech quality score: {dnsmos_score_distant['sig_mos']}, background noise score {dnsmos_score_distant['bak_mos']}')   # p808 = P.808 mapping   
         print(f'Enhance DNSMOS overall score: {dnsmos_score_enhanced['ovrl_mos']}, speech quality score: {dnsmos_score_enhanced['sig_mos']}, background noise score {dnsmos_score_enhanced['bak_mos']}')
     
+    # Save txt file
     else:
         logging.info(f'Making .txt file for metric scores')
 
