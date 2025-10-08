@@ -268,7 +268,7 @@ def process_one_scenario(cfg: Config, scenario: Path):
     distant_mono_float = distant_mono.astype(np.float32) / 32768.0
     enhanced_mono_float = enhanced_mono.astype(np.float32) / 32768.0    
 
-    # DNSMOS metric (range is (1 to 5))
+    # DNSMOS metric (range is (1 to 5)) (only 8kHz and 16kHz sample rate work for DNSMOS)
     logging.info(f'Processing DNSMOS {distant_path=} and {enhanced_path=}')
     dnsmos_score_distant  = dnsmos.run(distant_mono_float, cfg.fs)
     dnsmos_score_enhanced = dnsmos.run(enhanced_mono_float, cfg.fs)
