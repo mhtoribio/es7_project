@@ -8,9 +8,15 @@ import os
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import resample_poly
-from pystoi import stoi
 import sounddevice as sd
+import onnxruntime as ort 
+from pystoi import stoi
 from srmrpy import srmr
+from pesq import pesq
+from speechmos import dnsmos
+
+
+
 
 # ---------- CLI ----------
 
@@ -216,10 +222,6 @@ def stereo_to_mono(clean: np.ndarray, noisy: np.ndarray):
     
     return clean, noisy
 
-# Compute DNSMOS (1-10) 10 good
-
-# Compute PESQ
-
 # Convert to .txt file
 
 def process_one_scenario(cfg: Config, scenario: Path):
@@ -241,19 +243,37 @@ def process_one_scenario(cfg: Config, scenario: Path):
     clean_distant_mono, distant_mono   = stereo_to_mono(clean_distant_wav, distant_wav)
     clean_enhanced_mono, enhanced_mono = stereo_to_mono(clean_enhanced_wav, enhanced_wav)
 
-    # E-STOI metric
+    # E-STOI metric (range is (0 to 1))
     logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
     estoi_score_distant  = stoi(clean_distant_mono, distant_mono, cfg.fs, extended=True)
     estoi_score_enhanced = stoi(clean_enhanced_mono, enhanced_mono, cfg.fs, extended=True)
     print(f'Distant E-STOI score is: {estoi_score_distant}')
     print(f'Enhance E-STOI score is: {estoi_score_enhanced}')
 
-    # SRMR metric
-    logging.info(f'Processing E-STOI for {distant_path=} and {enhanced_path=}')
+    # SRMR metric (range is (0 to 20))
+    logging.info(f'Processing SRMR for {distant_path=} and {enhanced_path=}')
     srmr_score_distant, _  = srmr(distant_mono, cfg.fs, fast=True)  # We tried with mono and wav, they give same result. Also try with stereo 
     srmr_score_enhanced, _ = srmr(enhanced_mono, cfg.fs, fast=True)
     print(f'Distant SRMR score is: {srmr_score_distant}')
     print(f'Enhance SRMR score is: {srmr_score_enhanced}')
+
+    # PESQ metric (range is (-0.5 to 4.64) for 16kHz)
+    logging.info(f'Processing PESQ {distant_path=} and {enhanced_path=}')
+    pesq_score_distant  = pesq(cfg.fs, clean_distant_mono, distant_mono, 'wb')    # 'wb (16 kHz)' 'nb (8 kHz)'
+    pesq_score_enhanced = pesq(cfg.fs, clean_enhanced_mono, enhanced_mono, 'wb')    
+    print(f'Distant PESQ score is: {pesq_score_distant}')
+    print(f'Enhance PESQ score is: {pesq_score_enhanced}')
+
+    # convert int16 to float (DNSMOS is in range (-1,1))
+    distant_mono_float = distant_mono.astype(np.float32) / 32768.0
+    enhanced_mono_float = enhanced_mono.astype(np.float32) / 32768.0    
+
+    # DNSMOS metric (range is (1 to 5))
+    logging.info(f'Processing DNSMOS {distant_path=} and {enhanced_path=}')
+    dnsmos_score_distant  = dnsmos.run(distant_mono_float, cfg.fs)
+    dnsmos_score_enhanced = dnsmos.run(enhanced_mono_float, cfg.fs)
+    print(f'Distant DNSMOS overall score: {dnsmos_score_distant['ovrl_mos']}, speech quality score: {dnsmos_score_distant['sig_mos']}, background noise score {dnsmos_score_distant['bak_mos']}')   # p808 = P.808 mapping   
+    print(f'Enhance DNSMOS overall score: {dnsmos_score_enhanced['ovrl_mos']}, speech quality score: {dnsmos_score_enhanced['sig_mos']}, background noise score {dnsmos_score_enhanced['bak_mos']}')
 
     ''' Playing Sound
     sd.play(clean_distant_wav, cfg.fs)
