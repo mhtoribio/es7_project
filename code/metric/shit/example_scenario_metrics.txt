@@ -1,0 +1,8 @@
+Metric              Distant    Enhanced
+=======================================
+E-STOI               1.0000      1.0000
+SRMR                17.2086     17.2086
+PESQ                 0.0000      0.0000
+DNSMOS_ovrl          0.0000      0.0000
+DNSMOS_sig           0.0000      0.0000
+DNSMOS_bak           0.0000      0.0000
