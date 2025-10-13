@@ -38,7 +38,7 @@ AZURE_URL = "https://dns4public.blob.core.windows.net/dns4archive/datasets_fullb
 OUTPUT_PATH = "./datasets_fullband"
 
 EMO_NAMES = [
-"clean_fullband/datasets_fullband.clean_fullband.emotional_speech_000_NA_NA.tar.bz2",
+"clean_fullband/datasets_fullband.clean_fullband.emotional_speech_000_NA_NA.tar.bz2"
 ]
 
 READ_NAMES = [
