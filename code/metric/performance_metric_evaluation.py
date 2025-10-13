@@ -8,8 +8,7 @@ import os
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import resample_poly
-import sounddevice as sd
-import onnxruntime as ort 
+import onnxruntime as ort
 from pystoi import stoi
 from srmrpy import srmr
 from pesq import pesq
@@ -208,6 +207,9 @@ def prepare_wav_files(cfg: Config, source_spec: dict, noisy: Path) -> tuple[np.n
     
     # load clean, distant and enhanced
     x = load_and_resample_source(cfg, source_spec)
+    if x.ndim > 1:
+        x = x[:,0]
+
     fs_noisy, noisy = wavfile.read(noisy)
     logging.info(f'Loading clean={x} and {noisy=} wav file')
 
@@ -328,17 +330,6 @@ def process_one_scenario(cfg: Config, scenario: Path):
 
         logging.info(f"Saved metric scores to {out_file}")
 
-
-    ''' Playing Sound
-    sd.play(clean_distant_wav, cfg.fs)
-    sd.wait()  # wait until playback is finished
-    sd.play(distant_wav, cfg.fs)
-    sd.wait()  # wait until playback is finished
-    sd.play(clean_enhanced_wav, cfg.fs)
-    sd.wait()  # wait until playback is finished
-    sd.play(enhanced_wav, cfg.fs)
-    sd.wait()  # wait until playback is finished
-    '''
 
 # ---------- Entrypoint ----------
 
