@@ -15,23 +15,22 @@ From: ubuntu:24.04
     apt-get install -y --no-install-recommends \
         python3 python3-venv python3-pip python3-dev \
         build-essential pkg-config \
-        libsndfile1 ffmpeg ca-certificates
+        libsndfile1 ffmpeg ca-certificates git
     rm -rf /var/lib/apt/lists/*
 
     python3 -m venv /opt/venv
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel
 
-    # build tools first so compiles work
-    /opt/venv/bin/pip install --no-cache-dir cython
-
     # core pkgs
-    /opt/venv/bin/pip install --no-cache-dir numpy scipy matplotlib tqdm pyroomacoustics pystoi
+    /opt/venv/bin/pip install --no-cache-dir numpy scipy matplotlib tqdm pyroomacoustics pystoi librosa onnxruntime pandas soundfile requests speechmos gammatone
 
     # pesq: use venv and disable build isolation so it sees cython
+    /opt/venv/bin/pip install --no-cache-dir cython
     /opt/venv/bin/pip install --no-cache-dir --no-build-isolation pesq
 
-    # extras implied by imports
-    /opt/venv/bin/pip install --no-cache-dir librosa onnxruntime pandas soundfile requests
+	# Install SRMRpy
+	git clone https://github.com/jfsantos/SRMRpy /opt/SRMRpy
+	cd /opt/SRMRpy && /opt/venv/bin/python setup.py install
 
 %test
     # Test that Python works
