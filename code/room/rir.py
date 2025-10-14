@@ -189,13 +189,9 @@ def run(cfg: Config):
                     max_order=cfg.max_order)
 
     # Add microphone array
-    MIC_POS = linear_bar(
-    origin=wall_center_origin(cfg, M=8, spacing=0.035, wall=WALL),
-    height=1.20,
-    M=8,
-    spacing=0.035,
-    yaw_deg=0.0,            # 0° = array axis along x ⇒ parallel to that wall
-    )
+    MIC_POS = linear_bar(origin=wall_center_origin(cfg, M=8, spacing=0.035, wall=WALL), height=1.20,
+    M=8, spacing=0.035, yaw_deg=0.0)            # 0° = array axis along x ⇒ parallel to that wall
+
 
     SEATS = seats_along_table(cfg)
 
@@ -243,7 +239,7 @@ def run(cfg: Config):
     if cfg.debug_data_dir is not None:
         for i,m in tqdm.tqdm(list(itertools.product(range(S), range(M)))):
             rir = np.asarray(room.rir[m][i], dtype=float)
-            plot_ir_debug(room, cfg.fs, seat_idx=i, mic_idx=m, debug_dir=debug_out_dir, early_ms=80, headless=True)
+            plot_ir_debug(cfg, room, seat_idx=i, mic_idx=m, debug_dir=debug_out_dir, early_ms=80, headless=True)
     logging.info(f"Done. Files in: {out_dir.resolve()}")
 
 def main(argv=None) -> int:
