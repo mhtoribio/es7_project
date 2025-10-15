@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seadge"
+version = "0.0.1"
+description = "Speech Enhancement Algorithm Data Generation and Evaluation"
+requires-python = ">=3.10"
+authors = [
+  { name = "ESD752" }
+]
+license = { text = "tbd" }
+readme = "README.md"
+keywords = ["speech", "audio", "data-generation", "evaluation"]
+
+# optional URL field based on your setup.py
+[project.urls]
+homepage = "none"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests", "docs"]
+
+[project.scripts]
+seadge = "seadge.commandline.main:main"
