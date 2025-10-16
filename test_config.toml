@@ -1,0 +1,6 @@
+[logging]
+level = 'debug'
+
+[paths]
+clean_dir = "~/shit/clean_data"
+output_dir = "~/shit/seadge_output"

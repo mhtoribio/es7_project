@@ -10,8 +10,5 @@ p = common.parser_commands.add_parser(
     formatter_class = argparse.RawDescriptionHelpFormatter,
 )
 
-p.add_argument("-c", "--config", type=pathlib.Path, help="Config file location", required=True)
-
 def main(args):
     print("Running datagen")
-    print(f"{args.config =}")
