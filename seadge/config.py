@@ -18,8 +18,8 @@ class LoggingCfg(BaseModel):
 
 
 class PathsCfg(BaseModel):
-    clean_dir: Path
-    output_dir: Path
+    clean_dir: Path = Path("/tmp/seadge_clean")
+    output_dir: Path = Path("/tmp/seadge_output")
 
     @field_validator("output_dir", "clean_dir", mode="before")
     @classmethod
@@ -83,7 +83,7 @@ class Config(BaseSettings):
 
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
     # PathsCfg has required fields -> Config.paths is required too
-    paths: PathsCfg
+    paths: PathsCfg = Field(default_factory=PathsCfg)
     dsp: DspCfg = Field(default_factory=DspCfg)
 
 
@@ -102,6 +102,12 @@ class ConfigError(RuntimeError):
 # -----------------------------------------------------------------------------
 # Public API
 # -----------------------------------------------------------------------------
+
+def load_default() -> Config:
+    """Load the default config. ONLY RECOMMENDED FOR TESTING."""
+    cfg = Config()
+    _set(cfg)
+    return cfg
 
 def load(
     path: str | Path,
