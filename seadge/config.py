@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Tuple
 import os
 import threading
 import tomllib  # Python 3.11+. For 3.10 use "tomli"
@@ -55,9 +55,9 @@ class DspCfg(BaseModel):
     window_type: str = "sqrt_hann"
     samplerate: int = 16000
     # spectogram figure settings
-    x_tick_prop = (0, hop_size/samplerate, samplerate/hop_size);
-    y_tick_prop = (0, samplerate/(2000*hop_size), hop_size/2);
-    c_range     = (-55, 5);
+    x_tick_prop : Tuple[float, float, float] = (0, hop_size/samplerate, samplerate/hop_size);
+    y_tick_prop : Tuple[float, float, float] = (0, samplerate/(2000*hop_size), hop_size/2);
+    c_range     : Tuple[int, int]            = (-55, 5);
 
 
 class Config(BaseSettings):
