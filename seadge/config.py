@@ -1,11 +1,12 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple, Union, Literal, Annotated, List
 import os
 import threading
 import tomllib  # Python 3.11+. For 3.10 use "tomli"
+from math import cos, sin, radians
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from contextlib import contextmanager
 
@@ -60,6 +61,77 @@ class DspCfg(BaseModel):
     c_range     : Tuple[int, int]            = (-55, 5);
 
 
+class MicDesc(BaseModel):
+    array_type: Literal["linear"] = "linear"
+    num_mics: int = 5
+    spacing: float = 0.08          # meters between adjacent mics
+    height: float = 1.2            # z [m]
+    yaw_deg: float = 0.0           # 0° = +x axis, CCW around +z
+    origin: Tuple[float, float, float] = (2.5, 0.05, 0.0)  # center of array (x, y, z ignored; height used)
+
+    def expand_positions(self) -> List[Tuple[float, float, float]]:
+        """Return concrete mic positions for a linear array centered at origin."""
+        assert self.array_type == "linear"
+        # Direction unit vector in XY plane
+        ux, uy = cos(radians(self.yaw_deg)), sin(radians(self.yaw_deg))
+        # Centered offsets: e.g., for 5 mics -> [-2, -1, 0, 1, 2]*spacing
+        c = (self.num_mics - 1) / 2.0
+        x0, y0, _ = self.origin
+        z = self.height
+        return [
+            (x0 + (i - c) * self.spacing * ux,
+             y0 + (i - c) * self.spacing * uy,
+             z)
+            for i in range(self.num_mics)
+        ]
+
+
+class SourceSpec(BaseModel):
+    class LocationSpec(BaseModel):
+        pattern: Literal["cardioid", "omni", "dipole", "hypercardioid"] = "cardioid"
+        start_sample: int = 0
+        azimuth_deg: float = 0.0
+        colatitude_deg: float = 90.0
+        location_m: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+
+    direction_history: List[LocationSpec] = Field(min_length=1)
+
+
+class RoomCfg(BaseModel):
+    rt60: float = 0.45
+    dimensions_m: Tuple[float, float, float] = (5.0, 6.0, 3.0)
+
+    # Accept either a MicDesc (expanded automatically) or explicit positions
+    mic_pos: Union[MicDesc, List[Tuple[float, float, float]]] = Field(default_factory=MicDesc)
+    sources: List[SourceSpec] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _expand_and_validate(self):
+        Lx, Ly, Lz = self.dimensions_m
+
+        # If mic_pos is a MicDesc, expand to concrete positions
+        if isinstance(self.mic_pos, MicDesc):
+            self.mic_pos = self.mic_pos.expand_positions()
+
+        # Validate all mic positions are inside the room
+        for i, (x, y, z) in enumerate(self.mic_pos):
+            if not (0.0 <= x <= Lx and 0.0 <= y <= Ly and 0.0 <= z <= Lz):
+                raise ValueError(
+                    f"mic_pos[{i}]={(x,y,z)} outside room bounds (0..{Lx}, 0..{Ly}, 0..{Lz})"
+                )
+
+        # Validate source locations are inside the room
+        for sidx, src in enumerate(self.sources):
+            for tidx, loc in enumerate(src.direction_history):
+                x, y, z = loc.location_m
+                if not (0.0 <= x <= Lx and 0.0 <= y <= Ly and 0.0 <= z <= Lz):
+                    raise ValueError(
+                        f"source[{sidx}].direction_history[{tidx}].location_m {loc.location_m} "
+                        f"outside room bounds (0..{Lx}, 0..{Ly}, 0..{Lz})"
+                    )
+        return self
+
+
 class Config(BaseSettings):
     """
     App settings pulled from:
@@ -85,6 +157,7 @@ class Config(BaseSettings):
     # PathsCfg has required fields -> Config.paths is required too
     paths: PathsCfg = Field(default_factory=PathsCfg)
     dsp: DspCfg = Field(default_factory=DspCfg)
+    room: RoomCfg = Field(default_factory=RoomCfg)
 
 
 # -----------------------------------------------------------------------------
@@ -259,7 +332,7 @@ def _flatten_overrides(overrides: Mapping[str, Any]) -> dict[str, Any]:
     """
     out: dict[str, Any] = {}
 
-    def set_in(d: dict[str, Any], parts: list[str], value: Any) -> None:
+    def set_in(d: dict[str, Any], parts: List[str], value: Any) -> None:
         cur = d
         for p in parts[:-1]:
             cur = cur.setdefault(p, {})
