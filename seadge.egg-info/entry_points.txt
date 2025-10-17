@@ -1,0 +1,2 @@
+[console_scripts]
+seadge = seadge.commandline.main:main
