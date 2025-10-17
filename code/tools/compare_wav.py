@@ -29,7 +29,6 @@ def die(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(2)
 
-
 @dataclass
 class Audio:
     sr: int
@@ -192,6 +191,7 @@ def main():
     p.add_argument("--max-seconds", type=float, default=None, help="Limit analysis to first N seconds (faster)")
     p.add_argument("--maxlag-s", type=float, default=None, help="Limit cross-correlation search to ±N seconds")
     p.add_argument("--save-diff", type=str, default=None, help="Path to write aligned residual (float32 WAV)")
+    p.add_argument("--save-diff-spec", type=str, default=None, help="Path to write aligned residual spectogram")
     p.add_argument("--save-aligned", type=str, default=None, help="Prefix to write aligned A/B as WAVs (prefix_A.wav, prefix_B.wav)")
     args = p.parse_args()
 
@@ -267,6 +267,16 @@ def main():
                 sf.write(f"{prefix}_B.wav", (g*b_al).astype(np.float32), A.sr, subtype="FLOAT")
                 print(f"Wrote aligned A/B to: {prefix}_A.wav , {prefix}_B.wav")
 
+    if args.save_diff_spec:
+        from scipy.signal import ShortTimeFFT, get_window
+        fs = 16000
+        N_STFT = 512                                            # frame length (samples/window)
+        R_STFT = N_STFT // 2                                    # frame shift (samples of overlap = 50 %) 
+        win = np.sqrt(get_window('hann', N_STFT, fftbins=True)) # sqrt of periodic hann window
+        # spectogram figure settings
+        xTickProp = (0, R_STFT/fs, fs/R_STFT);
+        yTickProp = (0, fs/(2000*R_STFT), R_STFT/2);
+        cRange    = (-55, 5);
 
 if __name__ == "__main__":
     main()

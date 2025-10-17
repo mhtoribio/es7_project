@@ -112,6 +112,7 @@ alpha_SQRT_PSD_RETF = tmp["alpha_sqrtMP"]
 H_init_FT = doa2steervec(micPos, sourceAng, N_STFT_half, fs, c);
 # diffuse coherence matrix
 Gamma = calc_diffcoherence(micPos,N_STFT,fs,c,1e-3);
+np.save(OUT_DIR / "Gamma.npy", Gamma)
 
 ########################
 # FIGURE SETTINGS
@@ -126,7 +127,7 @@ cRange    = (-55, 5);
 #### STFT PROCESSING
 ########################
 
-STFT = ShortTimeFFT(win, R_STFT, fs, fft_mode="onesided", mfft=N_STFT)
+STFT = ShortTimeFFT(win, R_STFT, fs, fft_mode="onesided")
 # frequency bin X channel X frame
 y_STFT = STFT.stft(y_TD, axis=0)
 s1_STFT = STFT.stft(s1_TD, axis=0)
@@ -146,6 +147,7 @@ print(' * estimate early PSDs, update RETFs [2]...');
 
 # correlation matrix of microphone signal
 Psi_y_smth, Psi_y_mean = estim_corrmat(y_STFT, zeta);
+np.save(OUT_DIR / "Psi_y_smth.npy", Psi_y_smth[:,1:-1,:,:])
 # compute GEVD
 P_STFT, lambda_STFT, _ = desmooth_GEVD(Psi_y_smth, Gamma, 0, zeta)
 
@@ -154,6 +156,10 @@ phi_s_hat, phi_xl_hat, H_hat_prior_STFT, H_hat_post_STFT, H_update_pattern = est
                beta=20*lap_div*lap_div,
                xi_thresh=xi_thresh)
 
+np.save(OUT_DIR / "phi_s_hat.npy", phi_s_hat[:,1:-1,:])
+np.save(OUT_DIR / "H_hat_prior_STFT.npy", H_hat_prior_STFT[:,1:-1,:,:])
+np.save(OUT_DIR / "H_hat_post_STFT.npy", H_hat_post_STFT[:,1:-1,:,:])
+np.save(OUT_DIR / "H_update_pattern.npy", H_update_pattern[:,1:-1,:])
 plot_spec(phi_s_hat[:,:,0], scale='pow', x_tick_prop=xTickProp, y_tick_prop=yTickProp, c_range=cRange, filename=OUT_DIR/"phi_s_hat.png", title=f"target PSD estimate, {SNR = } dB")
 
 #########################################

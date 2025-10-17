@@ -37,9 +37,6 @@ def desmooth_GEVD(
     lambda_LP_STFT : float ndarray, shape (F, L, M)
         “Low-pass” (smoothed / GEVD instantaneous here) eigenvalues.
     """
-    Psi_x_STFT = np.asarray(Psi_x_STFT)
-    Gamma_FT   = np.asarray(Gamma_FT)
-
     F, L, M, M2 = Psi_x_STFT.shape
     assert M == M2, "Last two dims of Psi_x_STFT must be (M, M)"
     assert Gamma_FT.shape[0] == F and Gamma_FT.shape[2:] == (M, M), \

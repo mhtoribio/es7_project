@@ -1,0 +1,13 @@
+{
+	"scenario_type": "test_scenario",
+	"scenario_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"target_speaker": {
+		"wav_path": "x1.wav",
+		"volume": 1.0,
+		"seat": 5,
+		"delay_samples": 0,
+		"duration_samples": 160000,
+		"decimation": 1,
+		"interpolation": 1
+	}
+}
