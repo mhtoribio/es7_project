@@ -1,6 +1,5 @@
 import unittest
 
-
 class BasicTestSuite(unittest.TestCase):
     """Make sure the test framework runs as it is intended."""
 

@@ -16,6 +16,8 @@ keywords = ["speech", "audio", "data-generation", "evaluation"]
 dependencies = [
   "pydantic>=2.7",
   "pydantic-settings>=2.3",
+  "numpy>=2.3",
+  "scipy>=1.16"
 ]
 
 # optional URL field based on your setup.py
