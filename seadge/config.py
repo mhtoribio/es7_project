@@ -49,15 +49,15 @@ class PathsCfg(BaseModel):
     def debug_dir(self) -> Path: return self.output_dir / "debug"
 
 
-class SimulationCfg(BaseModel):
-    samplerate: int = 16000
-    clean_duration: int = 5*samplerate
-
-
-class StftCfg(BaseModel):
+class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
     window_type: str = "sqrt_hann"
+    samplerate: int = 16000
+    # spectogram figure settings
+    x_tick_prop = (0, hop_size/samplerate, samplerate/hop_size);
+    y_tick_prop = (0, samplerate/(2000*hop_size), hop_size/2);
+    c_range     = (-55, 5);
 
 
 class Config(BaseSettings):
@@ -84,8 +84,7 @@ class Config(BaseSettings):
     logging: LoggingCfg = Field(default_factory=LoggingCfg)
     # PathsCfg has required fields -> Config.paths is required too
     paths: PathsCfg
-    simulation: SimulationCfg = Field(default_factory=SimulationCfg)
-    stft: StftCfg = Field(default_factory=StftCfg)
+    dsp: DspCfg = Field(default_factory=DspCfg)
 
 
 # -----------------------------------------------------------------------------
