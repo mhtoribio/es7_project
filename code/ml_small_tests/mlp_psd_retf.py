@@ -8,18 +8,17 @@ from scipy import signal
 import matplotlib.pyplot as plt
 import re
 
-class RETFPSDEstimator(nn.Module):
-    def __init__(self, input_size=512, hidden_size=256, retf_output_size=257, psd_output_size=257):
+class RETFEstimator(nn.Module):
+    def __init__(self, input_size=1024, hidden_size=512, output_size=257):
         """
-        MLP for estimating RETF and target PSD from reverberant speech
+        Separate MLP for estimating RETF from reverberant speech
         
         Args:
-            input_size: STFT frequency bins (magnitude only)
+            input_size: STFT frequency bins (magnitude + phase concatenated)
             hidden_size: Hidden layer size
-            retf_output_size: RETF output size (frequency bins * channels)
-            psd_output_size: PSD output size (frequency bins)
+            output_size: RETF output size (frequency bins * channels)
         """
-        super(RETFPSDEstimator, self).__init__()
+        super(RETFEstimator, self).__init__()
         
         self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_size),
@@ -34,26 +33,56 @@ class RETFPSDEstimator(nn.Module):
             
             nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
+            nn.BatchNorm1d(hidden_size // 4),
         )
         
-        # Separate heads for RETF and PSD estimation
         self.retf_head = nn.Sequential(
-            nn.Linear(hidden_size // 4, retf_output_size),
+            nn.Linear(hidden_size // 4, output_size),
             nn.Tanh()  # Keep outputs in reasonable range
         )
         
+    def forward(self, x):
+        features = self.encoder(x)
+        retf_output = self.retf_head(features)
+        return retf_output
+
+class PSDEstimator(nn.Module):
+    def __init__(self, input_size=1024, hidden_size=512, output_size=257):
+        """
+        Separate MLP for estimating PSD from reverberant speech
+        
+        Args:
+            input_size: STFT frequency bins (magnitude + phase concatenated)
+            hidden_size: Hidden layer size
+            output_size: PSD output size (frequency bins)
+        """
+        super(PSDEstimator, self).__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_size),
+            nn.Dropout(0.2),
+            
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.Dropout(0.2),
+            
+            nn.Linear(hidden_size // 2, hidden_size // 4),
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_size // 4),
+        )
+        
         self.psd_head = nn.Sequential(
-            nn.Linear(hidden_size // 4, psd_output_size),
+            nn.Linear(hidden_size // 4, output_size),
             nn.Softplus()  # PSD must be non-negative
         )
         
     def forward(self, x):
         features = self.encoder(x)
-        
-        retf_output = self.retf_head(features)
         psd_output = self.psd_head(features)
-        
-        return retf_output, psd_output
+        return psd_output
 
 def compute_stft(audio, n_fft=512, hop_length=256):
     """Compute STFT of audio signal"""
@@ -207,11 +236,18 @@ def prepare_training_data(clean_folder, reverberant_folder, rir_folder, n_fft=51
                     retf_true = compute_true_retf(rir_early, n_fft=n_fft)
                     f_psd, psd_true = compute_true_psd(clean_audio, rir_early, n_fft=n_fft)
                     
-                    # Use only magnitude of STFT as features
+                    # Extract magnitude and phase from STFT
                     stft_magnitude = np.abs(stft_reverberant).T  # Shape: (time_frames, freq_bins)
+                    stft_phase = np.angle(stft_reverberant).T   # Shape: (time_frames, freq_bins)
+                    
+                    # Normalize phase to [-1, 1] range (since phase is in [-pi, pi])
+                    stft_phase_normalized = stft_phase / np.pi
+                    
+                    # Concatenate magnitude and phase along feature dimension
+                    stft_features = np.concatenate([stft_magnitude, stft_phase_normalized], axis=1)
                     
                     data_pairs.append({
-                        'reverberant_magnitude': stft_magnitude,
+                        'reverberant_features': stft_features,
                         'retf_true': retf_true,
                         'psd_true': psd_true,
                         'clean_file': clean_file,
@@ -219,7 +255,7 @@ def prepare_training_data(clean_folder, reverberant_folder, rir_folder, n_fft=51
                         'rir_file': rir_file_used
                     })
                     
-                    print(f"    Processed: STFT shape {stft_magnitude.shape}, RETF shape {retf_true.shape}, PSD shape {psd_true.shape}")
+                    print(f"    Processed: Features shape {stft_features.shape}, RETF shape {retf_true.shape}, PSD shape {psd_true.shape}")
                     
                 except Exception as e:
                     print(f"    Error processing reverberant file {reverberant_file}: {e}")
@@ -239,22 +275,22 @@ def create_dataset(data_pairs, n_fft=512, max_frames_per_file=100):
     y_psd = []
     
     for pair in data_pairs:
-        stft_magnitude = pair['reverberant_magnitude']  # Shape: (time_frames, freq_bins)
+        stft_features = pair['reverberant_features']  # Shape: (time_frames, 2 * freq_bins)
         retf_true = pair['retf_true']  # Shape: (freq_bins, channels)
         psd_true = pair['psd_true']    # Shape: (freq_bins,)
         
         # Limit number of frames per file to avoid memory issues
-        num_frames = min(stft_magnitude.shape[0], max_frames_per_file)
-        stft_magnitude = stft_magnitude[:num_frames]
+        num_frames = min(stft_features.shape[0], max_frames_per_file)
+        stft_features = stft_features[:num_frames]
         
         # Flatten RETF to 1D array
         retf_flat = retf_true.flatten()  # Shape: (freq_bins * channels,)
         
         # Repeat RETF and PSD for each time frame
         for i in range(num_frames):
-            X.append(stft_magnitude[i])  # One frame of STFT magnitude
-            y_retf.append(retf_flat)     # Same RETF for all frames of this file
-            y_psd.append(psd_true)       # Same PSD for all frames of this file
+            X.append(stft_features[i])  # One frame of STFT features (magnitude + phase)
+            y_retf.append(retf_flat)    # Same RETF for all frames of this file
+            y_psd.append(psd_true)      # Same PSD for all frames of this file
     
     # Convert to tensors
     X_tensor = torch.FloatTensor(np.array(X))
@@ -265,42 +301,60 @@ def create_dataset(data_pairs, n_fft=512, max_frames_per_file=100):
     
     return torch.utils.data.TensorDataset(X_tensor, y_retf_tensor, y_psd_tensor)
 
-def train_model(model, dataset, epochs=50, batch_size=32):
-    """Train the RETF and PSD estimation model"""
+def train_separate_models(retf_model, psd_model, dataset, epochs=50, batch_size=32):
+    """Train the separate RETF and PSD estimation models"""
     
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+    
+    # Separate optimizers for each model
+    retf_optimizer = optim.Adam(retf_model.parameters(), lr=0.001, weight_decay=1e-5)
+    psd_optimizer = optim.Adam(psd_model.parameters(), lr=0.001, weight_decay=1e-5)
     
     mse_loss = nn.MSELoss()
     
-    train_losses = []
+    retf_losses = []
+    psd_losses = []
+    total_losses = []
     
     for epoch in range(epochs):
-        model.train()
-        epoch_loss = 0
+        retf_model.train()
+        psd_model.train()
+        
+        epoch_retf_loss = 0
+        epoch_psd_loss = 0
+        epoch_total_loss = 0
         
         for batch_X, batch_retf, batch_psd in dataloader:
-            optimizer.zero_grad()
-            
-            pred_retf, pred_psd = model(batch_X)
-            
-            # Compute losses
+            # Train RETF model
+            retf_optimizer.zero_grad()
+            pred_retf = retf_model(batch_X)
             retf_loss = mse_loss(pred_retf, batch_retf)
+            retf_loss.backward()
+            retf_optimizer.step()
+            
+            # Train PSD model
+            psd_optimizer.zero_grad()
+            pred_psd = psd_model(batch_X)
             psd_loss = mse_loss(pred_psd, batch_psd)
+            psd_loss.backward()
+            psd_optimizer.step()
             
-            total_loss = retf_loss + psd_loss
-            total_loss.backward()
-            optimizer.step()
-            
-            epoch_loss += total_loss.item()
+            epoch_retf_loss += retf_loss.item()
+            epoch_psd_loss += psd_loss.item()
+            epoch_total_loss += (retf_loss.item() + psd_loss.item())
         
-        avg_loss = epoch_loss / len(dataloader)
-        train_losses.append(avg_loss)
+        avg_retf_loss = epoch_retf_loss / len(dataloader)
+        avg_psd_loss = epoch_psd_loss / len(dataloader)
+        avg_total_loss = epoch_total_loss / len(dataloader)
+        
+        retf_losses.append(avg_retf_loss)
+        psd_losses.append(avg_psd_loss)
+        total_losses.append(avg_total_loss)
         
         if epoch % 10 == 0:
-            print(f"Epoch {epoch}, Loss: {avg_loss:.6f}")
+            print(f"Epoch {epoch}, RETF Loss: {avg_retf_loss:.6f}, PSD Loss: {avg_psd_loss:.6f}, Total Loss: {avg_total_loss:.6f}")
     
-    return train_losses
+    return retf_losses, psd_losses, total_losses
 
 def main():
     # Configuration
@@ -310,6 +364,7 @@ def main():
     
     n_fft = 512
     hop_length = 256
+    num_freq_bins = n_fft // 2 + 1  # 257 for n_fft=512
     
     print("Preparing training data...")
     data_pairs = prepare_training_data(CLEAN_FOLDER, REVERBERANT_FOLDER, RIR_FOLDER, n_fft, max_files=20)
@@ -334,31 +389,61 @@ def main():
     retf_output_size = sample_retf.shape[0] * sample_retf.shape[1]  # freq_bins * channels
     psd_output_size = sample_psd.shape[0]  # freq_bins
     
-    print(f"Model output sizes - RETF: {retf_output_size}, PSD: {psd_output_size}")
+    # Input size is now 2 * num_freq_bins (magnitude + phase)
+    input_size = 2 * num_freq_bins
     
-    print("Initializing model...")
-    model = RETFPSDEstimator(
-        input_size=n_fft//2 + 1,  # STFT magnitude bins
-        hidden_size=256,
-        retf_output_size=retf_output_size,
-        psd_output_size=psd_output_size
+    print(f"Model input size: {input_size}")
+    print(f"RETF output size: {retf_output_size}")
+    print(f"PSD output size: {psd_output_size}")
+    
+    print("Initializing separate models...")
+    retf_model = RETFEstimator(
+        input_size=input_size,
+        hidden_size=512,
+        output_size=retf_output_size
     )
     
-    print("Training model...")
-    losses = train_model(model, dataset, epochs=50, batch_size=32)
+    psd_model = PSDEstimator(
+        input_size=input_size, 
+        hidden_size=512,
+        output_size=psd_output_size
+    )
     
-    # Save model
-    torch.save(model.state_dict(), "retf_psd_estimator.pth")
-    print("Model saved as 'retf_psd_estimator.pth'")
+    print("Training separate models...")
+    retf_losses, psd_losses, total_losses = train_separate_models(
+        retf_model, psd_model, dataset, epochs=50, batch_size=32
+    )
     
-    # Plot training loss
-    plt.figure(figsize=(10, 6))
-    plt.plot(losses)
-    plt.title('Training Loss')
+    # Save models separately
+    torch.save(retf_model.state_dict(), "retf_estimator.pth")
+    torch.save(psd_model.state_dict(), "psd_estimator.pth")
+    print("Models saved as 'retf_estimator.pth' and 'psd_estimator.pth'")
+    
+    # Plot training losses
+    plt.figure(figsize=(12, 8))
+    
+    plt.subplot(2, 1, 1)
+    plt.plot(retf_losses, label='RETF Loss', color='blue')
+    plt.plot(psd_losses, label='PSD Loss', color='red')
+    plt.plot(total_losses, label='Total Loss', color='green', linestyle='--')
+    plt.title('Training Losses - Separate Models')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.legend()
     plt.grid(True)
-    plt.savefig('training_loss.png')
+    
+    plt.subplot(2, 1, 2)
+    plt.plot(retf_losses, label='RETF Loss', color='blue')
+    plt.plot(psd_losses, label='PSD Loss', color='red')
+    plt.title('Training Losses (Log Scale) - Separate Models')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss (log)')
+    plt.yscale('log')
+    plt.legend()
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('training_losses_separate_models.png')
     plt.show()
 
 if __name__ == "__main__":
