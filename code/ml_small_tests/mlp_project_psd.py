@@ -7,6 +7,7 @@ import soundfile as sf
 from scipy import signal
 import matplotlib.pyplot as plt
 import re
+from sklearn.model_selection import train_test_split
 
 class PSDEstimator(nn.Module):
     def __init__(self, input_size=1024, hidden_size=256, output_size=257):
@@ -53,14 +54,20 @@ def extract_early_rir(rir, early_samples=512):
         return rir[:early_samples]
 
 def compute_true_psd(clean_speech, rir_early, n_fft=512, sr=16000):
-    """Compute true PSD of early speech component"""
+    """Compute true PSD using the same method as the STFT features"""
     if len(rir_early.shape) > 1:
         rir_mono = rir_early[:, 0]
     else:
         rir_mono = rir_early
         
     early_speech = signal.convolve(clean_speech, rir_mono, mode='same')
-    f, psd = signal.welch(early_speech, fs=sr, nperseg=n_fft)
+    
+    # Compute STFT of early speech (same method as reverberant speech)
+    f, t, stft_early = signal.stft(early_speech, fs=sr, nperseg=n_fft, noverlap=n_fft-256)
+    
+    # Compute PSD as |STFT|^2 (periodogram estimate)
+    psd = np.mean(np.abs(stft_early)**2, axis=1)  # Average over time
+    
     return f, psd
 
 def extract_seat_number(filename):
@@ -187,46 +194,218 @@ def create_psd_dataset(data_pairs, n_fft=512, max_frames_per_file=50):
     
     return X_tensor, y_psd_tensor
 
-def train_psd_model(model, X, y_psd, epochs=100, batch_size=32):
-    """Train the PSD estimation model"""
+def train_psd_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=32):
+    """Train the PSD estimation model with validation"""
     
-    dataset = torch.utils.data.TensorDataset(X, y_psd)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, factor=0.5)
     criterion = nn.MSELoss()
     
-    losses = []
+    train_losses = []
+    val_losses = []
     
     print("Training PSD model...")
     
     for epoch in range(epochs):
+        # Training phase
         model.train()
-        epoch_loss = 0
+        epoch_train_loss = 0
         
-        for batch_X, batch_y in dataloader:
+        for batch_X, batch_y in train_loader:
             optimizer.zero_grad()
             pred = model(batch_X)
             loss = criterion(pred, batch_y)
             loss.backward()
             optimizer.step()
             
-            epoch_loss += loss.item()
+            epoch_train_loss += loss.item()
         
-        avg_loss = epoch_loss / len(dataloader)
-        losses.append(avg_loss)
+        avg_train_loss = epoch_train_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
         
-        scheduler.step(avg_loss)
+        # Validation phase
+        model.eval()
+        with torch.no_grad():
+            val_pred = model(X_val)
+            val_loss = criterion(val_pred, y_val).item()
+        val_losses.append(val_loss)
+        
+        scheduler.step(val_loss)
         current_lr = optimizer.param_groups[0]['lr']
         
         if epoch % 10 == 0:
-            print(f"Epoch {epoch:3d}, PSD Loss: {avg_loss:.6f}, LR: {current_lr:.6f}")
+            print(f"Epoch {epoch:3d}, Train Loss: {avg_train_loss:.6f}, Val Loss: {val_loss:.6f}, LR: {current_lr:.6f}")
     
-    return losses
+    return train_losses, val_losses
+
+# ==================== TESTING FUNCTIONS ====================
+
+def test_model_sanity(model, X_test, y_test):
+    """Basic sanity checks for the model"""
+    
+    print("Running model sanity checks...")
+    
+    # Test 1: Model can make predictions without errors
+    try:
+        with torch.no_grad():
+            predictions = model(X_test[:10])  # Test on small batch
+        print("✓ Model can make predictions")
+    except Exception as e:
+        print(f"✗ Prediction failed: {e}")
+        return False
+    
+    # Test 2: Output shape matches expected
+    expected_shape = (10, y_test.shape[1])  # (batch_size, freq_bins)
+    if predictions.shape == expected_shape:
+        print(f"✓ Output shape correct: {predictions.shape}")
+    else:
+        print(f"✗ Output shape wrong. Expected {expected_shape}, got {predictions.shape}")
+        return False
+    
+    # Test 3: Outputs are non-negative (PSD requirement)
+    if torch.all(predictions >= 0):
+        print("✓ All outputs are non-negative")
+    else:
+        print("✗ Some outputs are negative")
+        return False
+    
+    return True
+
+def evaluate_model_performance(model, X_test, y_test):
+    """Comprehensive model evaluation"""
+    
+    print("Evaluating model performance...")
+    
+    model.eval()
+    with torch.no_grad():
+        predictions = model(X_test)
+    
+    # Calculate various metrics
+    mse = nn.MSELoss()(predictions, y_test).item()
+    mae = nn.L1Loss()(predictions, y_test).item()
+    
+    # Relative metrics
+    relative_mse = (mse / (y_test.std().item() ** 2)) * 100
+    signal_to_noise = 10 * torch.log10(torch.mean(y_test ** 2) / torch.mean((predictions - y_test) ** 2)).item()
+    
+    print(f"Performance Metrics:")
+    print(f"  MSE: {mse:.6f}")
+    print(f"  MAE: {mae:.6f}")
+    print(f"  Relative MSE: {relative_mse:.2f}%")
+    print(f"  Signal-to-Noise Ratio: {signal_to_noise:.2f} dB")
+    
+    # Check if predictions are reasonable
+    pred_mean = predictions.mean().item()
+    target_mean = y_test.mean().item()
+    ratio = pred_mean / target_mean if target_mean > 0 else 0
+    
+    print(f"  Prediction mean: {pred_mean:.4f}")
+    print(f"  Target mean: {target_mean:.4f}")
+    print(f"  Ratio: {ratio:.4f}")
+    
+    return {
+        'mse': mse, 
+        'mae': mae, 
+        'relative_mse': relative_mse,
+        'snr': signal_to_noise,
+        'prediction_mean': pred_mean,
+        'target_mean': target_mean
+    }
+
+def visualize_predictions(model, X_test, y_test, num_examples=3):
+    """Visual comparison of predicted vs true PSD"""
+    
+    print("Generating prediction visualizations...")
+    
+    model.eval()
+    with torch.no_grad():
+        predictions = model(X_test)
+    
+    # Convert to numpy for plotting
+    pred_np = predictions.numpy()
+    target_np = y_test.numpy()
+    
+    # Select random examples
+    indices = np.random.choice(len(X_test), num_examples, replace=False)
+    
+    fig, axes = plt.subplots(num_examples, 1, figsize=(12, 3*num_examples))
+    
+    if num_examples == 1:
+        axes = [axes]
+    
+    for i, idx in enumerate(indices):
+        axes[i].plot(target_np[idx], 'b-', label='True PSD', alpha=0.7, linewidth=2)
+        axes[i].plot(pred_np[idx], 'r--', label='Predicted PSD', alpha=0.7, linewidth=2)
+        axes[i].set_xlabel('Frequency Bin')
+        axes[i].set_ylabel('PSD')
+        axes[i].set_title(f'Example {i+1} (Sample {idx})')
+        axes[i].legend()
+        axes[i].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('psd_predictions.png', dpi=150, bbox_inches='tight')
+    plt.show()
+    
+    # Plot correlation scatter
+    plt.figure(figsize=(8, 6))
+    plt.scatter(target_np.flatten(), pred_np.flatten(), alpha=0.3, s=1)
+    max_val = max(target_np.max(), pred_np.max())
+    plt.plot([0, max_val], [0, max_val], 'r--', label='Ideal', linewidth=2)
+    plt.xlabel('True PSD')
+    plt.ylabel('Predicted PSD')
+    plt.title('Predicted vs True PSD (All Test Samples)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.savefig('psd_scatter.png', dpi=150, bbox_inches='tight')
+    plt.show()
+    
+    return indices, pred_np, target_np
+
+def comprehensive_model_test(model, X_test, y_test):
+    """Run all tests on the trained model"""
+    
+    print("\n" + "="*50)
+    print("RUNNING COMPREHENSIVE MODEL TESTS")
+    print("="*50)
+    
+    # Test 1: Basic sanity
+    print("\n1. BASIC SANITY CHECKS:")
+    sanity_ok = test_model_sanity(model, X_test, y_test)
+    
+    # Test 2: Performance metrics
+    print("\n2. PERFORMANCE EVALUATION:")
+    metrics = evaluate_model_performance(model, X_test, y_test)
+    
+    # Test 3: Visual inspection
+    print("\n3. VISUAL INSPECTION:")
+    indices, pred_np, target_np = visualize_predictions(model, X_test, y_test, num_examples=3)
+    
+    # Summary
+    print("\n" + "="*50)
+    print("TEST SUMMARY")
+    print("="*50)
+    print(f"Basic Sanity: {'PASS' if sanity_ok else 'FAIL'}")
+    print(f"Test MSE: {metrics['mse']:.6f}")
+    print(f"Test MAE: {metrics['mae']:.6f}")
+    print(f"Relative MSE: {metrics['relative_mse']:.2f}%")
+    print(f"SNR: {metrics['snr']:.2f} dB")
+    
+    # Rough benchmarks
+    if metrics['relative_mse'] < 50:  # Less than 50% relative error
+        print("✓ Performance is reasonable")
+    else:
+        print("✗ Performance needs improvement")
+    
+    if metrics['snr'] > 0:  # Positive SNR means better than random
+        print("✓ SNR is positive (better than random)")
+    else:
+        print("✗ SNR is negative (worse than random)")
 
 def main():
-    """Main function for PSD training"""
+    """Main function for PSD training and testing"""
     # Configuration
     CLEAN_FOLDER = "./data_project/clean"
     REVERBERANT_FOLDER = "./data_project/distant" 
@@ -248,13 +427,24 @@ def main():
         print("No PSD training data found!")
         return
     
-    # Create dataset
-    X, y_psd = create_psd_dataset(data_pairs, n_fft)
+    # Split data into train and test sets
+    train_pairs, test_pairs = train_test_split(
+        data_pairs, test_size=0.2, random_state=42, shuffle=True
+    )
+    
+    print(f"Training samples: {len(train_pairs)}")
+    print(f"Testing samples: {len(test_pairs)}")
+    
+    # Create datasets
+    X_train, y_train = create_psd_dataset(train_pairs, n_fft)
+    X_test, y_test = create_psd_dataset(test_pairs, n_fft)
     
     # Calculate output size
-    psd_output_size = y_psd.shape[1]
+    psd_output_size = y_train.shape[1]
     
     print(f"PSD Model - Input: {input_size}, Output: {psd_output_size}")
+    print(f"Training data: {X_train.shape[0]} frames")
+    print(f"Testing data: {X_test.shape[0]} frames")
     
     # Initialize model
     model = PSDEstimator(
@@ -263,23 +453,39 @@ def main():
         output_size=psd_output_size
     )
     
-    # Train model
-    losses = train_psd_model(model, X, y_psd, epochs=100)
+    # Train model with validation
+    train_losses, val_losses = train_psd_model(
+        model, X_train, y_train, X_test, y_test, epochs=100
+    )
     
     # Save model
     torch.save(model.state_dict(), "psd_model.pth")
     print("PSD model saved as 'psd_model.pth'")
     
-    # Plot training loss
+    # Plot training and validation loss
     plt.figure(figsize=(10, 6))
-    plt.plot(losses)
-    plt.title('PSD Model Training Loss')
+    plt.plot(train_losses, label='Training Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.title('PSD Model Training and Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+    plt.legend()
     plt.grid(True)
     plt.yscale('log')
-    plt.savefig('psd_training_loss.png')
+    plt.savefig('psd_training_loss.png', dpi=150, bbox_inches='tight')
     plt.show()
+    
+    # ==================== TESTING PHASE ====================
+    print("\n" + "="*50)
+    print("MODEL TESTING PHASE")
+    print("="*50)
+    
+    # Run comprehensive tests on the test set
+    comprehensive_model_test(model, X_test, y_test)
+
+    print(f"Input features range: [{X_train.min():.6f}, {X_train.max():.6f}]")
+    print(f"Target PSD range: [{y_train.min():.6f}, {y_train.max():.6f}]")
+    print(f"Target PSD mean: {y_train.mean():.6f}, std: {y_train.std():.6f}")
 
 if __name__ == "__main__":
     main()
