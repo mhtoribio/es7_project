@@ -1,4 +1,3 @@
-# tests/test_validate_scenario.py
 import os
 import unittest
 import tempfile

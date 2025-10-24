@@ -3,7 +3,7 @@ let
   py = pkgs.python312;
   pythonEnv = py.withPackages (ps: [ ps.numpy ]);
 in pkgs.mkShell {
-  buildInputs = [ pythonEnv ];
+  buildInputs = [ pythonEnv pkgs.ffmpeg ];
   shellHook = ''
     if [ ! -d .venv ]; then
       ${py.interpreter} -m venv .venv

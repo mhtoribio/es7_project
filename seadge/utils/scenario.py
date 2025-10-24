@@ -5,11 +5,9 @@ from scipy.io import wavfile
 from scipy.signal import resample_poly
 import json
 
-import logging
-log = logging.getLogger(__name__)
-
 from seadge import config
 from seadge.utils.wavfiles import wavfile_frames, wavfile_samplerate
+from seadge.utils.log import log
 
 def validate_scenario(scen: dict) -> bool:
     cfg = config.get()

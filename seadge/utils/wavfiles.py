@@ -5,10 +5,8 @@ from scipy.signal import resample_poly
 import wave
 import pathlib
 
-import logging
-log = logging.getLogger(__name__)
-
 from seadge import config
+from seadge.utils.log import log
 
 def wavfile_frames(p: pathlib.Path) -> int:
     with wave.open(str(p), "rb") as w:

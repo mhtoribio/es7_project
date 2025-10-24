@@ -1,7 +1,9 @@
 import argparse
 import sys
 import pathlib
+import logging
 from seadge import config
+from seadge.utils.log import setup_logger
 
 parser = argparse.ArgumentParser(description='SEADGE Command Line Interface',
                                  prog='seadge')
@@ -15,4 +17,6 @@ def entrypoint(commands):
         sys.exit()
     args = parser.parse_args()
     config.load(path=args.config, create_dirs=True)
+    cfg = config.get()
+    setup_logger(cfg.logging)
     commands[args.command](args)

@@ -18,7 +18,9 @@ dependencies = [
   "pydantic-settings>=2.3",
   "numpy>=2.3",
   "scipy>=1.16",
-  "matplotlib>=3.10"
+  "matplotlib>=3.10",
+  "pyroomacoustics>=0.7.7",
+  "tqdm>=4.67"
 ]
 
 # optional URL field based on your setup.py

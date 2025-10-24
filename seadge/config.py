@@ -16,6 +16,7 @@ from contextlib import contextmanager
 
 class LoggingCfg(BaseModel):
     level: str = "INFO"     # INFO|DEBUG|WARNING|ERROR
+    format: str = "[%(asctime)s %(levelname)s] %(message)s"
 
 
 class PathsCfg(BaseModel):
@@ -49,16 +50,25 @@ class PathsCfg(BaseModel):
     @property
     def debug_dir(self) -> Path: return self.output_dir / "debug"
 
+    @property
+    def rir_cache_dir(self) -> Path: return self.output_dir / "rir_cache"
+
 
 class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
     window_type: str = "sqrt_hann"
     samplerate: int = 16000
+
     # spectogram figure settings
     x_tick_prop : Tuple[float, float, float] = (0, hop_size/samplerate, samplerate/hop_size);
     y_tick_prop : Tuple[float, float, float] = (0, samplerate/(2000*hop_size), hop_size/2);
     c_range     : Tuple[int, int]            = (-55, 5);
+
+    # RIR convolution settings
+    rirconv_method    : str = "oaconv" # "oaconv" or "fft"
+    rirconv_normalize : str = "none" # "none"|"direct"|"energy"
+    rirconv_xfade_ms  : float = 64.0
 
 
 class MicDesc(BaseModel):
@@ -94,12 +104,13 @@ class SourceSpec(BaseModel):
         colatitude_deg: float = 90.0
         location_m: Tuple[float, float, float] = (1.0, 1.0, 1.0)
 
-    direction_history: List[LocationSpec] = Field(min_length=1)
+    location_history: List[LocationSpec] = Field(min_length=1)
 
 
 class RoomCfg(BaseModel):
     rt60: float = 0.45
     dimensions_m: Tuple[float, float, float] = (5.0, 6.0, 3.0)
+    max_image_order: int = 10
 
     # Accept either a MicDesc (expanded automatically) or explicit positions
     mic_pos: Union[MicDesc, List[Tuple[float, float, float]]] = Field(default_factory=MicDesc)
@@ -122,7 +133,7 @@ class RoomCfg(BaseModel):
 
         # Validate source locations are inside the room
         for sidx, src in enumerate(self.sources):
-            for tidx, loc in enumerate(src.direction_history):
+            for tidx, loc in enumerate(src.location_history):
                 x, y, z = loc.location_m
                 if not (0.0 <= x <= Lx and 0.0 <= y <= Ly and 0.0 <= z <= Lz):
                     raise ValueError(
@@ -158,6 +169,7 @@ class Config(BaseSettings):
     paths: PathsCfg = Field(default_factory=PathsCfg)
     dsp: DspCfg = Field(default_factory=DspCfg)
     room: RoomCfg = Field(default_factory=RoomCfg)
+    debug: bool = Field(default=False)
 
 
 # -----------------------------------------------------------------------------
