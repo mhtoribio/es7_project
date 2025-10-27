@@ -22,6 +22,7 @@ class LoggingCfg(BaseModel):
 class PathsCfg(BaseModel):
     clean_dir: Path = Path("/tmp/seadge_clean")
     output_dir: Path = Path("/tmp/seadge_output")
+    download_cache_dir: Path = Path("/tmp/seadge_download_cache")
 
     @field_validator("output_dir", "clean_dir", mode="before")
     @classmethod
@@ -52,7 +53,6 @@ class PathsCfg(BaseModel):
 
     @property
     def rir_cache_dir(self) -> Path: return self.output_dir / "rir_cache"
-
 
 class DspCfg(BaseModel):
     window_len: int = 512
@@ -170,6 +170,7 @@ class Config(BaseSettings):
     dsp: DspCfg = Field(default_factory=DspCfg)
     room: RoomCfg = Field(default_factory=RoomCfg)
     debug: bool = Field(default=False)
+    clean_zip_files: int = Field(default=1)
 
 
 # -----------------------------------------------------------------------------
