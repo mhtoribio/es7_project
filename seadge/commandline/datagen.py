@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import sys
 
-from seadge import data_download, room_modelling, distant
+from seadge import data_download, room_generation, room_modelling, distant
 from seadge.commandline import common
 from seadge.utils.log import log
 
@@ -18,7 +18,8 @@ parser_subcommands = p.add_subparsers(dest='subcommand')
 subcommands = {
     "rir": room_modelling.main,
     "distant": distant.main,
-    "download": data_download.main
+    "download": data_download.main,
+    "rooms": room_generation.main,
 }
 
 p_sub_rir = parser_subcommands.add_parser(
@@ -39,6 +40,13 @@ p_sub_download = parser_subcommands.add_parser(
     "download",
     help = "Download data from DNS Challenge",
     description = "Download data from DNS Challenge",
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    )
+
+p_sub_rooms = parser_subcommands.add_parser(
+    "rooms",
+    help = "Generate rooms",
+    description = "Generate rooms",
     formatter_class = argparse.RawDescriptionHelpFormatter,
     )
 

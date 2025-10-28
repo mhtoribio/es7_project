@@ -10,6 +10,39 @@ def _q(x, q=1e-6):
     if isinstance(x, dict): return {k: _q(v, q) for k, v in x.items()}
     return x
 
+def make_room_cache_key(room_cfg) -> str:
+    """
+    Deterministically hash a RoomCfg into a 40-hex SHA-1.
+    Includes: room dims/rt60/max_image_order, expanded mic positions,
+    and all source location histories (pattern, start_sample, az/col, location).
+    Floats are quantized to reduce spurious diffs.
+    """
+    sources_payload = []
+    for s in room_cfg.sources:
+        locs = []
+        for loc in s.location_history:
+            locs.append({
+                "pattern": loc.pattern,
+                "start_sample": int(loc.start_sample),
+                "az_deg": _q(loc.azimuth_deg),
+                "col_deg": _q(loc.colatitude_deg),
+                "location_m": _q(loc.location_m),
+            })
+        sources_payload.append({"location_history": locs})
+
+    payload = {
+        "room": {
+            "dimensions_m": _q(room_cfg.dimensions_m),
+            "rt60": _q(room_cfg.rt60),
+            "max_image_order": int(room_cfg.max_image_order),
+        },
+        "mics": [_q(p) for p in room_cfg.mic_pos], # expanded positions
+        "sources": sources_payload,                # full source specs
+    }
+
+    s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
 def make_rir_cache_key(room_cfg, fs: int, loc) -> str:
     payload = {
         "fs": fs,

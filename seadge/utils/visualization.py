@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from seadge import config
 from typing import Optional
 from pathlib import Path
+
+from seadge.utils.log import log
  
 # Spectrogram
 def spectrogram(

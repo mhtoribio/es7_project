@@ -4,9 +4,9 @@ from typing import Iterator, Tuple, Any
 from tqdm import tqdm
 
 from seadge import config
-from seadge.utils.visualization import plot_rir, plot_room_topdown, plot_room_3d
+from seadge.utils.visualization import plot_rir
 from seadge.utils.log import log
-from seadge.utils.cache import make_rir_cache_key, update_manifest, save_rir, try_load_cached_rir
+from seadge.utils.cache import make_room_cache_key, update_manifest, save_rir, try_load_cached_rir
 
 def build_room(room_cfg: config.RoomCfg, fs: int) -> pra.ShoeBox:
     Lx, Ly, Lz = room_cfg.dimensions_m
@@ -70,15 +70,15 @@ def rir_for_pose(src_pos: tuple[float,float,float],
 
 class SourcePoses:
     """Iterate all (src_idx, pose_idx, src, loc) across the config."""
-    def __init__(self, cfg):
-        self._cfg = cfg
-        self._total = sum(len(_history(s)) for s in cfg.room.sources)
+    def __init__(self, room_cfg):
+        self._room_cfg = room_cfg
+        self._total = sum(len(_history(s)) for s in room_cfg.sources)
 
     def __len__(self) -> int:
         return self._total
 
     def __iter__(self) -> Iterator[Tuple[int, int, Any, Any]]:
-        for i, src in enumerate(self._cfg.room.sources):
+        for i, src in enumerate(self._room_cfg.room.sources):
             for j, loc in enumerate(_history(src)):
                 yield i, j, src, loc
 
@@ -87,18 +87,14 @@ def _history(src):
     return getattr(src, "direction_history",
            getattr(src, "location_history", []))
 
-def get_all_rirs(save_npy=False, save_room_plot=True, save_rir_plots=False):
+def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False):
     cfg = config.get()
-
-    if save_room_plot:
-        plot_room_topdown(cfg.room, cfg.paths.debug_dir / "room" / "room_topdown.png")
-        plot_room_3d(cfg.room, cfg.paths.debug_dir / "room" / "room_3d.png")
 
     cache_root = cfg.paths.rir_cache_dir
 
-    for i, j, _, loc in tqdm(SourcePoses(cfg), desc="Computing RIRs"):
+    for i, j, _, loc in tqdm(SourcePoses(room_cfg), desc="Computing RIRs"):
         # ---- cache key & load attempt ----
-        key = make_rir_cache_key(cfg.room, cfg.dsp.samplerate, loc)
+        key = make_room_cache_key(room_cfg, cfg.dsp.samplerate, loc)
         rir = try_load_cached_rir(cache_root, key)
 
         # ---- compute if cache miss ----
@@ -110,10 +106,10 @@ def get_all_rirs(save_npy=False, save_room_plot=True, save_rir_plots=False):
                 meta = {
                     "fs": cfg.dsp.samplerate,
                     "room": {
-                        "dimensions_m": tuple(cfg.room.dimensions_m),
-                        "rt60": float(cfg.room.rt60),
-                        "max_order": int(cfg.room.max_image_order),
-                        "mics": [tuple(p) for p in cfg.room.mic_pos],
+                        "dimensions_m": tuple(room_cfg.dimensions_m),
+                        "rt60": float(room_cfg.rt60),
+                        "max_order": int(room_cfg.max_image_order),
+                        "mics": [tuple(p) for p in room_cfg.mic_pos],
                     },
                     "pose": {
                         "loc": tuple(loc.location_m),
@@ -161,4 +157,4 @@ def get_all_rirs(save_npy=False, save_room_plot=True, save_rir_plots=False):
 
 def main():
     cfg = config.get()
-    get_all_rirs(save_npy=True, save_room_plot=True, save_rir_plots=cfg.debug)
+    get_all_rirs(cfg.room, save_npy=True, save_rir_plots=cfg.debug)

@@ -40,6 +40,9 @@ class PathsCfg(BaseModel):
     def distant_dir(self) -> Path: return self.output_dir / "distant"
 
     @property
+    def room_dir(self) -> Path: return self.output_dir / "rooms"
+
+    @property
     def enhanced_dir(self) -> Path: return self.output_dir / "enhanced"
 
     @property
@@ -75,9 +78,8 @@ class MicDesc(BaseModel):
     array_type: Literal["linear"] = "linear"
     num_mics: int = 5
     spacing: float = 0.08          # meters between adjacent mics
-    height: float = 1.2            # z [m]
     yaw_deg: float = 0.0           # 0° = +x axis, CCW around +z
-    origin: Tuple[float, float, float] = (2.5, 0.05, 0.0)  # center of array (x, y, z ignored; height used)
+    origin: Tuple[float, float, float] = (2.5, 0.05, 1.2)  # center of array (x, y, z)
 
     def expand_positions(self) -> List[Tuple[float, float, float]]:
         """Return concrete mic positions for a linear array centered at origin."""
@@ -86,8 +88,7 @@ class MicDesc(BaseModel):
         ux, uy = cos(radians(self.yaw_deg)), sin(radians(self.yaw_deg))
         # Centered offsets: e.g., for 5 mics -> [-2, -1, 0, 1, 2]*spacing
         c = (self.num_mics - 1) / 2.0
-        x0, y0, _ = self.origin
-        z = self.height
+        x0, y0, z = self.origin
         return [
             (x0 + (i - c) * self.spacing * ux,
              y0 + (i - c) * self.spacing * uy,
@@ -143,6 +144,33 @@ class RoomCfg(BaseModel):
         return self
 
 
+class RoomGenCfg(BaseModel):
+    rt60_min: float = 0.3
+    rt60_max: float = 1.0
+    min_dimensions_m: Tuple [float, float, float] = (3.0, 4.0, 2.0)
+    max_dimensions_m: Tuple [float, float, float] = (8.0, 10.0, 4.0)
+    max_image_order: int = 10
+
+    num_generated_rooms: int = 3
+
+    min_num_source_locations: int = 2
+    max_num_source_locations: int = 5
+    # Minimum distances from sources to wall and mic
+    # Be careful choosing these values since they (along with room dimensions) also determine "spread" of sources in the room
+    min_source_distance_to_wall_m: float = 1.0
+    min_source_distance_to_mic_m: float = 2.0
+    min_source_inter_spacing: float = 0.4
+    max_source_movement_m: float = 1.0
+    max_azimuth_rotation_deg: float = 90.0
+    max_movement_steps: int = 3
+    min_movement_step_duration: int = 16000 # value in samples
+
+    # mic array
+    num_mics: int = 5
+    mic_spacing: float = 0.05
+    mic_wall_offset: float = 0.05
+    mic_height: float = 1.2
+
 class Config(BaseSettings):
     """
     App settings pulled from:
@@ -168,7 +196,7 @@ class Config(BaseSettings):
     # PathsCfg has required fields -> Config.paths is required too
     paths: PathsCfg = Field(default_factory=PathsCfg)
     dsp: DspCfg = Field(default_factory=DspCfg)
-    room: RoomCfg = Field(default_factory=RoomCfg)
+    roomgen: RoomGenCfg = Field(default_factory=RoomGenCfg)
     debug: bool = Field(default=False)
     clean_zip_files: int = Field(default=1)
 
@@ -229,6 +257,31 @@ def load(
                 f"Details:\n{e}"
             ) from e
 
+def load_room(path: str | Path) -> RoomCfg:
+    """
+    Load Room Config from file
+    """
+    try:
+        file_data = _read_config_file(Path(path))
+        room_cfg = RoomCfg.model_validate(file_data)
+        return room_cfg
+
+    except ValidationError as e:
+        raise ConfigError(
+            "Invalid configuration. Ensure required keys exist and types are correct.\n"
+            f"Details:\n{e}"
+        ) from e
+
+def save_json(cfg: BaseModel, path: Path, *, indent: int = 2, exclude_none: bool = True) -> None:
+    """
+    Serialize a Pydantic model to JSON on disk.
+    Uses an atomic write (temp file + rename).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    json_text = cfg.model_dump_json(indent=indent, exclude_none=exclude_none)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json_text, encoding="utf-8", newline="\n")
+    tmp.replace(path)
 
 def get() -> Config:
     """Return the active config. Raises if you forgot to call load()."""
