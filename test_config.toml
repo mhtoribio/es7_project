@@ -2,7 +2,7 @@
 level = 'debug'
 
 [paths]
-clean_dir = "~/shit/clean_data"
+clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
 
 [roomgen]

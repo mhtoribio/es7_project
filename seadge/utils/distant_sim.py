@@ -22,12 +22,30 @@ def _xfade_windows(L: int) -> Tuple[np.ndarray, np.ndarray]:
     w_down = 1.0 - w_up
     return w_down, w_up
 
+def _pre_window(pos_len: int, xfade_len: int, first: bool = False, last: bool = False) -> np.ndarray:
+    """
+    Window for clean speech at position i.
+    Crossfaded in [tstart_i, tstart_i+xfade_len] and [tstart_next, tstart_next+xfade_len]
+    """
+    if xfade_len <= 0:
+        return np.ones(pos_len)
+
+    win_len = pos_len+xfade_len if not last else pos_len
+    win = np.ones(win_len)
+    w_down, w_up = _xfade_windows(xfade_len)
+    if not first:
+        win[0: xfade_len] = w_up
+    if not last:
+        win[pos_len: pos_len+xfade_len] = w_down
+    return win
+
 def _convolve_seg(x_seg: np.ndarray, H_RM: np.ndarray, method: str = "oaconv") -> np.ndarray:
     """
     x_seg: (Ns,)
     H_RM:  (R, M)
     return: (Ns+R-1, M)
     """
+    assert x_seg.ndim == 1
     x_seg = np.asarray(x_seg, float)
     H_RM  = np.asarray(H_RM,  float)
     if method == "oaconv":
@@ -293,42 +311,40 @@ def sim_distant_src(
 
     seg_out: List[Tuple[int, np.ndarray]] = []  # (s0, yk)
     for idx, (s0, H) in enumerate(schedule):
-        s1 = schedule[idx+1][0] if (idx+1 < len(schedule)) else N
+        last = idx+1 < len(schedule)
+        s1 = schedule[idx+1][0] if last else N
         s0 = max(0, min(s0, N))
         s1 = max(s0, min(s1, N))
-        x_seg = clean[s0:s1]
+        win = _pre_window(s1-s0, xfade_len, first = idx==0, last=last)
+        x_clean_seg = clean[s0:s1+xfade_len]
+        x_seg = x_clean_seg * win if (idx+1 < len(schedule)) else x_clean_seg * win[0: s1-s0]
         yk = _convolve_seg(x_seg, H, method=method)  # (len+R-1, M)
+
+        # mhtdebug
+        # import matplotlib.pyplot as plt
+        # plt.plot(win)
+        # plt.title("win")
+        # plt.savefig("/home/markus/shit/win.png")
+        # plt.close()
+        # plt.plot(x_clean_seg)
+        # plt.title("clean_seg")
+        # plt.savefig("/home/markus/shit/clean_seg.png")
+        # plt.close()
+        # plt.plot(x_seg)
+        # plt.title("x_seg")
+        # plt.savefig("/home/markus/shit/seg.png")
+        # plt.close()
+        # plt.plot(yk)
+        # plt.title("yk")
+        # plt.savefig("/home/markus/shit/yk.png")
+        # plt.close()
+        # exit()
+
         seg_out.append((s0, yk))
 
     # 3) Overlap-add all segments
     for s0, yk in seg_out:
         y[s0:s0+yk.shape[0], :] += yk
-
-    # 4) Crossfade at boundaries (forward crossfade)
-    for k in range(len(seg_out) - 1):
-        s0_prev, y_prev = seg_out[k]
-        s0_next, y_next = seg_out[k+1]
-        boundary = s0_next
-
-        off_prev = boundary - s0_prev
-        off_next = 0
-
-        L = min(
-            xfade_len,
-            max(0, y_prev.shape[0] - off_prev),
-            y_next.shape[0]
-        )
-        if L <= 0:
-            continue
-
-        w_down, w_up = _xfade_windows(L)
-        a0, a1 = boundary, boundary + L
-
-        prev_slice = y_prev[off_prev:off_prev+L, :]
-        next_slice = y_next[off_next:off_next+L, :]
-
-        # Replace in y with crossfaded mix
-        y[a0:a1, :] = (prev_slice * w_down[:, None]) + (next_slice * w_up[:, None])
 
     return y
 

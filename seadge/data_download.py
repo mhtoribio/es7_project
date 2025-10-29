@@ -189,25 +189,6 @@ def _is_within_directory(base: Path, target: Path) -> bool:
     except Exception:
         return False
 
-def _safe_tar_extract(t: tarfile.TarFile, dest: Path) -> None:
-    """
-    Safely extract tar members into dest:
-    - No absolute paths
-    - No path traversal (..)
-    - Skip symlinks/hardlinks
-    """
-    for m in t.getmembers():
-        if m.issym() or m.islnk():
-            if log:
-                log.warning(f"Skipping link in archive: {m.name}")
-            continue
-        member_path = dest / m.name
-        if not _is_within_directory(dest, member_path):
-            if log:
-                log.error(f"Blocked unsafe path in archive: {m.name}")
-            continue
-        t.extract(m, path=dest)
-
 def unzip_all_archives(
     zipdir: Path,
     outdir: Path,
@@ -259,7 +240,7 @@ def unzip_all_archives(
                 log.info(f"Extracting {arch.name} -> {target_dir}")
 
             with tarfile.open(arch, mode="r:*") as tf:
-                _safe_tar_extract(tf, target_dir)
+                tf.extractall(target_dir)
 
             if log:
                 log.debug(f"Finished extracting {arch.name}")

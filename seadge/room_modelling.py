@@ -6,7 +6,7 @@ from tqdm import tqdm
 from seadge import config
 from seadge.utils.visualization import plot_rir
 from seadge.utils.log import log
-from seadge.utils.cache import make_room_cache_key, update_manifest, save_rir, try_load_cached_rir
+from seadge.utils.cache import make_rir_cache_key, update_manifest, save_rir, try_load_cached_rir
 
 def build_room(room_cfg: config.RoomCfg, fs: int) -> pra.ShoeBox:
     Lx, Ly, Lz = room_cfg.dimensions_m
@@ -54,12 +54,12 @@ def _stack_rirs_rightpad(room, *, fs: int, early_ms: float | None = None) -> np.
         H[:len(h), m] = h
     return H
 
-def rir_for_pose(src_pos: tuple[float,float,float],
+def rir_for_pose(room_cfg: config.RoomCfg, src_pos: tuple[float,float,float],
                   pattern: str, az_deg: float, col_deg: float):
     cfg = config.get()
     log.debug(f"Computing RIR for {src_pos = }, {pattern = }, {az_deg = }, {col_deg = }")
     # rebuild room each time to ensure correct state reset between computations
-    room = build_room(cfg.room, cfg.dsp.samplerate)
+    room = build_room(room_cfg, cfg.dsp.samplerate)
     # add source (with directivity)
     directivity = make_directivity(pattern, az_deg, col_deg)
     room.add_source(src_pos, directivity=directivity)
@@ -78,7 +78,7 @@ class SourcePoses:
         return self._total
 
     def __iter__(self) -> Iterator[Tuple[int, int, Any, Any]]:
-        for i, src in enumerate(self._room_cfg.room.sources):
+        for i, src in enumerate(self._room_cfg.sources):
             for j, loc in enumerate(_history(src)):
                 yield i, j, src, loc
 
@@ -94,12 +94,12 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
     for i, j, _, loc in tqdm(SourcePoses(room_cfg), desc="Computing RIRs"):
         # ---- cache key & load attempt ----
-        key = make_room_cache_key(room_cfg, cfg.dsp.samplerate, loc)
+        key = make_rir_cache_key(room_cfg, cfg.dsp.samplerate, loc)
         rir = try_load_cached_rir(cache_root, key)
 
         # ---- compute if cache miss ----
         if rir is None:
-            rir = rir_for_pose(loc.location_m, loc.pattern, loc.azimuth_deg, loc.colatitude_deg)
+            rir = rir_for_pose(room_cfg, loc.location_m, loc.pattern, loc.azimuth_deg, loc.colatitude_deg)
 
             # ---- optionally persist to disk (.npy + manifest) ----
             if save_npy:
@@ -157,4 +157,5 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
 def main():
     cfg = config.get()
-    get_all_rirs(cfg.room, save_npy=True, save_rir_plots=cfg.debug)
+    room = config.load_room("/home/markus/shit/seadge_output/rooms/064218cd7b9b8911f6dfb503588273cc7e4ef815.json") # mhtdebug
+    get_all_rirs(room, save_npy=True, save_rir_plots=cfg.debug)
