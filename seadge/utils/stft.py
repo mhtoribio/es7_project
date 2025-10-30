@@ -22,7 +22,7 @@ def _load_stft():
 
     # Instantiate ShortTimeFFT class
     global _STFT
-    _STFT = ShortTimeFFT(_win, cfg.dsp.hop_size, cfg.dsp.samplerate, fft_mode="onesided")
+    _STFT = ShortTimeFFT(_win, cfg.dsp.hop_size, cfg.dsp.datagen_samplerate, fft_mode="onesided")
 
 def stft(x: np.ndarray, axis: int = -1) -> np.ndarray:
     """Computes the STFT with the settings stored in config.

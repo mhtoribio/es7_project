@@ -5,6 +5,11 @@ level = 'debug'
 clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
 
+[dsp]
+datagen_samplerate = 48000
+enhancement_samplerate = 16000
+rirconv_xfade_ms = 64
+
 [roomgen]
 rt60_min = 0.3
 rt60_max = 1.0
@@ -29,3 +34,9 @@ num_mics = 5
 mic_spacing = 0.05
 mic_y = 0.05
 mic_z = 1.2
+
+[scenariogen]
+scenario_duration = 480000
+min_speaker_volume = 0.8
+max_speaker_volume = 1.0
+scenarios_per_room = 5

@@ -5,7 +5,7 @@ import math
 
 from seadge.utils.visualization import plot_room_topdown, plot_room_3d
 from seadge.utils.log import log
-from seadge.utils.cache import make_room_cache_key
+from seadge.utils.cache import make_pydantic_cache_key
 from seadge import config
 
 def _dist_2d(a: tuple[float, float], b: tuple[float, float]):
@@ -352,9 +352,9 @@ def create_all_rooms(gencfg: config.RoomGenCfg, outpath: Path):
     """
     for _ in range(gencfg.num_generated_rooms):
         room_cfg = gen_random_room(gencfg)
-        room_hash = make_room_cache_key(room_cfg)
+        room_hash = make_pydantic_cache_key(room_cfg)
         log.debug(f"Generated room {room_hash}")
-        config.save_json(room_cfg, outpath / f"{room_hash}.json")
+        config.save_json(room_cfg, outpath / f"{room_hash}.room.json")
         plot_room_topdown(room_cfg, outpath / f"{room_hash}_topdown.png")
         plot_room_3d(room_cfg, outpath / f"{room_hash}_3d.png")
 

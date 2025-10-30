@@ -28,7 +28,7 @@ class StftVisualizationTestSuite(unittest.TestCase):
         config.load_default()
         cfg = config.get()
         t = np.arange(0, 16384, 1)
-        x = np.sin(2000*2*np.pi*t/cfg.dsp.samplerate)
+        x = np.sin(2000*2*np.pi*t/cfg.dsp.datagen_samplerate)
         S = stft.stft(x)
 
         visualization.spectrogram(S, TEST_OUTPUT_DIR/"spectrogram_test.png", title="Test Spectrogram")

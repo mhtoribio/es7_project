@@ -36,6 +36,6 @@ def write_wav(path: pathlib.Path, x: np.ndarray, fs: Optional[int] = None):
     cfg = config.get()
     log.debug(f"Writing wav file {path.relative_to(cfg.paths.output_dir)}")
     if fs is None:
-        wavfile.write(path, x, cfg.dsp.samplerate)
+        wavfile.write(path, x, cfg.dsp.datagen_samplerate)
     else:
         wavfile.write(path, x, fs)

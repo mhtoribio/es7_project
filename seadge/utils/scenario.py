@@ -1,19 +1,117 @@
+from __future__ import annotations
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional, Tuple
+import re
+import json
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import resample_poly
-import json
+
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from seadge import config
 from seadge.utils.wavfiles import wavfile_frames, wavfile_samplerate
 from seadge.utils.log import log
 
-def validate_scenario(scen: dict) -> bool:
-    cfg = config.get()
-    MAX_DURATION_SAMPLES = cfg.dsp.samplerate * 20
 
-    def _file_has_enough_audio(abs_wav_path: Path, needed_samples: int, decimation: int, interpolation: int, expected_fs: int) -> bool:
+# -----------------------------------------------------------------------------
+# Pydantic models
+# -----------------------------------------------------------------------------
+
+class WavSource(BaseModel):
+    """
+    Single WAV source spec (target or interferer).
+    - sourceloc: integer index identifying where to place/mix this source (replaces `seat`)
+                 Validated to be >= 0. If you want to check against a specific RoomCfg's
+                 number of sources later, do it where you have the room available.
+    """
+    wav_path: str
+    volume: float
+    sourceloc: int
+    delay_samples: int
+    duration_samples: int
+    decimation: int
+    interpolation: int
+
+    @model_validator(mode="after")
+    def _basic_sanity(self) -> "WavSource":
+        if not (0.0 <= float(self.volume) <= 1.0):
+            raise ValueError(f"volume out of range [0,1]: {self.volume}")
+        if self.sourceloc < 0:
+            raise ValueError(f"sourceloc must be >= 0 (got {self.sourceloc})")
+        if self.delay_samples < 0:
+            raise ValueError(f"negative delay: {self.delay_samples}")
+        if self.duration_samples <= 0:
+            raise ValueError(f"non-positive duration: {self.duration_samples}")
+        if self.decimation <= 0 or self.interpolation <= 0:
+            raise ValueError("decimation and interpolation must be positive integers")
+        return self
+
+
+_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+
+class Scenario(BaseModel):
+    """
+    Whole scenario definition; validated on load.
+    - room_id:     40 hex chars (SHA-1)
+    """
+    room_id: str
+    duration_samples: int
+    scenario_type: Optional[str] = None
+    target_speaker: WavSource
+    other_sources: Optional[List[WavSource]] = Field(default_factory=list)
+
+    @field_validator("room_id")
+    @classmethod
+    def _check_room_id(cls, v: str) -> str:
+        if not _SHA1_RE.match(v):
+            raise ValueError("room_id must be a 40-char lowercase SHA-1 hex string")
+        return v
+
+    @field_validator("other_sources", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v):
+        return [] if v is None else v
+
+    @model_validator(mode="after")
+    def _full_validation(self) -> "Scenario":
+        # top-level duration
+        if not (self.duration_samples > 0):
+            raise ValueError(
+                f"duration_samples must be in positive "
+                f"(got {self.duration_samples})"
+            )
+
+        # timing consistency vs top-level duration
+        self._check_timing(self.target_speaker, "target_speaker")
+        for i, s in enumerate(self.other_sources or []):
+            self._check_timing(s, f"other_sources[{i}]")
+
+        # file existence + length + effective samplerate match
+        self._check_file_ok(self.target_speaker, "target_speaker")
+        for i, s in enumerate(self.other_sources or []):
+            self._check_file_ok(s, f"other_sources[{i}]")
+
+        return self
+
+    # ---- helpers used inside model validation ----
+
+    def _check_timing(self, src: WavSource, label: str) -> None:
+        top = self.duration_samples
+        if src.delay_samples + src.duration_samples > top:
+            raise ValueError(
+                f"{label}: delay+duration ({src.delay_samples + src.duration_samples}) "
+                f"exceeds scenario duration ({top})"
+            )
+
+    def _file_has_enough_audio(
+        self,
+        abs_wav_path: Path,
+        needed_samples: int,
+        decimation: int,
+        interpolation: int,
+        expected_fs: int,
+    ) -> bool:
         try:
             frames = wavfile_frames(abs_wav_path)
             fs = wavfile_samplerate(abs_wav_path)
@@ -21,155 +119,114 @@ def validate_scenario(scen: dict) -> bool:
             log.debug("Failed to read WAV header %s: %s", abs_wav_path, e)
             return False
 
+        # Keep your exact integer resampling check
         resampled_fs = fs * interpolation // decimation
         if resampled_fs != expected_fs:
-            log.debug(f"Sample rate mismatch for {abs_wav_path} (clean {fs}, want {expected_fs}; {decimation=} and {interpolation=} resulting in {resampled_fs}")
+            log.debug(
+                "Sample rate mismatch for %s (clean %d, want %d; decim=%d, interp=%d -> %d)",
+                abs_wav_path, fs, expected_fs, decimation, interpolation, resampled_fs
+            )
             return False
 
-        # frames = per-channel sample count; compare directly to needed per-channel samples
         resampled_frames = frames * interpolation // decimation
         if resampled_frames < needed_samples:
-            log.debug("WAV too short: need %d samples, file has %d (%d after resampling)", needed_samples, frames, resampled_frames)
+            log.debug(
+                "WAV too short: need %d samples, file has %d (%d after resampling)",
+                needed_samples, frames, resampled_frames
+            )
             return False
 
         return True
 
-    def _req(s: dict, key: str, typ: type | tuple[type, ...]) -> Any:
-        if key not in s:
-            log.debug("Missing key %r in source %r", key, s)
-            raise KeyError(key)
-        val = s[key]
-        if not isinstance(val, typ):
-            log.debug("Key %r has wrong type: %r (expected %r)", key, type(val), typ)
-            raise TypeError(key)
-        return val
+    def _check_file_ok(self, src: WavSource, label: str) -> None:
+        cfg = config.get()
+        abs_wav = (cfg.paths.clean_dir / src.wav_path).expanduser().resolve()
+        if not abs_wav.is_file():
+            raise ValueError(f"{label}: wav_path invalid or missing: {src.wav_path}")
 
-    def _validate_source(src: dict, top_dur: int, label: str) -> bool:
-        try:
-            delay         = _req(src, "delay_samples", int)
-            dur           = _req(src, "duration_samples", int)
-            seat          = _req(src, "seat", int)
-            vol           = _req(src, "volume", (int, float))
-            wrel          = _req(src, "wav_path", str)
-            decimation    = _req(src, "decimation", int)
-            interpolation = _req(src, "interpolation", int)
+        ok = self._file_has_enough_audio(
+            abs_wav_path=abs_wav,
+            needed_samples=src.duration_samples,
+            decimation=src.decimation,
+            interpolation=src.interpolation,
+            expected_fs=cfg.dsp.datagen_samplerate,
+        )
+        if not ok:
+            raise ValueError(f"{label}: file shorter than requested duration or fs mismatch")
 
-            if delay < 0:
-                log.debug("%s: negative delay (%d)", label, delay)
-                return False
-            if dur <= 0:
-                log.debug("%s: non-positive duration (%d)", label, dur)
-                return False
-            if delay + dur > top_dur:
-                log.debug("%s: delay+duration (%d) exceeds scenario duration (%d)",
-                              label, delay + dur, top_dur)
-                return False
 
-            # volume in [0.0, 1.0]
-            if not (0.0 <= float(vol) <= 1.0):
-                log.debug("%s: volume out of range [0,1]: %r", label, vol)
-                return False
-
-            # seat index: 0 <= seat < cfg.seats
-            if not (0 <= seat < cfg.room.num_seats):
-                log.debug("%s: seat %d out of range [0, %d)", label, seat, cfg.room.num_seats)
-                return False
-
-            abs_wav = (cfg.paths.clean_dir / wrel).expanduser().resolve()
-            if not abs_wav.is_file():
-                log.debug("%s: wav_path invalid: %s", label, wrel)
-                return False
-
-            # Check the file is long enough for the source’s own duration
-            if not _file_has_enough_audio(abs_wav, dur, decimation, interpolation, cfg.dsp.samplerate):
-                log.debug("%s: file shorter than requested duration (%d)", label, dur)
-                return False
-
-            return True
-        except Exception as e:
-            log.debug("%s: validation error: %s", label, e)
-            return False
-
-    try:
-        scenario_id = _req(scen, "scenario_id", str)
-        if len(scenario_id) != 32:
-            log.debug("Invalid scenario id (%s)", scenario_id)
-            return False
-
-        # top-level duration
-        if not isinstance(scen.get("duration_samples"), int):
-            log.debug("Top-level duration_samples missing or not int")
-            return False
-        top_dur = scen["duration_samples"]
-        if not (top_dur > 0 and top_dur < MAX_DURATION_SAMPLES):
-            log.debug("Invalid top-level duration (%d), must be (0, %d)",
-                          top_dur, MAX_DURATION_SAMPLES)
-            return False
-
-        # target speaker
-        target = scen.get("target_speaker")
-        if not isinstance(target, dict):
-            log.debug("Missing or invalid target_speaker")
-            return False
-        if not _validate_source(target, top_dur, "target_speaker"):
-            return False
-
-        # other sources (optional but if present must be a list of dicts)
-        others = scen.get("other_sources", [])
-        if others is None:
-            others = []
-        if not isinstance(others, list):
-            log.debug("other_sources must be a list (got %r)", type(others))
-            return False
-        for i, src in enumerate(others):
-            if not isinstance(src, dict):
-                log.debug("other_sources[%d] is not a dict", i)
-                return False
-            if not _validate_source(src, top_dur, f"other_sources[{i}]"):
-                return False
-
-        # optional: scenario_type is allowed to be anything stringy; skip strict check
-        return True
-
-    except Exception as e:
-        log.debug("Scenario validation failed with exception: %s", e)
-        return False
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
 
 def delay_and_scale_source(output_len: int, x: np.ndarray, delay_samples: int, duration_samples: int, volume: float) -> np.ndarray:
     y = np.zeros(output_len, dtype=float)
-    log.debug(f"Delaying source with {delay_samples} samples and duration {duration_samples}, and scaling with {volume}")
-    y[delay_samples: delay_samples+duration_samples] = x[:duration_samples] * volume
+    log.debug("Delaying source with %d samples and duration %d, scaling by %g",
+              delay_samples, duration_samples, volume)
+    y[delay_samples: delay_samples + duration_samples] = x[:duration_samples] * volume
     return y
 
-def load_and_resample_source(source_spec: dict) -> np.ndarray:
+
+def load_and_resample_source(source_spec: WavSource) -> np.ndarray:
     """
-    Loads, normalizes, and resamples source file according to spec JSON object.
-    Assumes spec has been validated.
+    Loads, normalizes, and resamples source file according to spec.
+    Assumes the Scenario has already been validated.
     """
     cfg = config.get()
-    fs, x = wavfile.read(cfg.paths.clean_dir / source_spec["wav_path"])
-    log.debug(f"Read wavfile with {fs=} and {x.shape=}")
-    decimation = source_spec["decimation"]
-    interpolation = source_spec["interpolation"]
-    x_normalized = (0.99 / (np.max(np.abs(x)) + 1e-12)) * x
-    x_resampled = resample_poly(x_normalized, interpolation, decimation)
-    log.debug(f"Resampled wavfile with {decimation=} and {interpolation=} from {fs} to {fs*interpolation//decimation} ({x_resampled.shape=})")
-    return x_resampled
+    abs_wav = (cfg.paths.clean_dir / source_spec.wav_path).expanduser().resolve()
+    fs, x = wavfile.read(abs_wav)
+    log.debug("Read wavfile %s with fs=%d and shape=%s", abs_wav, fs, getattr(x, "shape", None))
 
-def prepare_source(source_spec: dict, output_len: int) -> tuple[np.ndarray, int]:
+    # Convert to float mono if needed
+    x = x.astype(np.float64, copy=False)
+    if x.ndim == 2 and x.shape[1] > 1:
+        x = np.mean(x, axis=1)
+
+    # Normalize peak
+    peak = float(np.max(np.abs(x))) if x.size else 1.0
+    if peak <= 0:
+        peak = 1.0
+    x_normalized = (0.99 / peak) * x
+
+    decim = source_spec.decimation
+    interp = source_spec.interpolation
+    x_resampled = resample_poly(x_normalized, interp, decim)
+    log.debug(
+        "Resampled with decimation=%d interpolation=%d from %d to %d (shape=%s)",
+        decim, interp, fs, fs * interp // decim, x_resampled.shape
+    )
+    return x_resampled.astype(np.float64, copy=False)
+
+
+def prepare_source(source_spec: WavSource, output_len: int) -> tuple[np.ndarray, int]:
     """
-    Loads wav source and processes it according to spec.
-    Returns: (signal to mix, seat index)
+    Loads WAV source and processes it according to the spec.
+    Returns: (signal to mix, sourceloc index)
     """
-    log.debug(f"Preparing source {source_spec['wav_path']}")
+    log.debug("Preparing source %s", source_spec.wav_path)
     x = load_and_resample_source(source_spec)
-    x_to_mix = delay_and_scale_source(output_len, x, source_spec["delay_samples"], source_spec["duration_samples"], source_spec["volume"])
-    return x_to_mix, source_spec["seat"]
+    x_to_mix = delay_and_scale_source(
+        output_len, x,
+        source_spec.delay_samples,
+        source_spec.duration_samples,
+        source_spec.volume,
+    )
+    return x_to_mix, source_spec.sourceloc
 
-def load_scenario(path: Path) -> dict:
+
+# -----------------------------------------------------------------------------
+# Load API
+# -----------------------------------------------------------------------------
+
+def load_scenario(path: Path) -> Scenario:
+    """
+    Load a scenario JSON file and validate into a Scenario model.
+    Raises ValidationError on invalid input.
+    """
     try:
-        with open(path) as f:
-            scen = json.load(f)
+        with open(path, "r") as f:
+            data = json.load(f)
     except ValueError as e:
-        raise ValueError("Error parsing scenario file: ", e)
+        raise ValueError("Error parsing scenario file") from e
+    scen = Scenario.model_validate(data)
     return scen

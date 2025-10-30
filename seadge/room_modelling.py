@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 from seadge import config
 from seadge.utils.visualization import plot_rir
+from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
 from seadge.utils.cache import make_rir_cache_key, update_manifest, save_rir, try_load_cached_rir
 
@@ -59,13 +60,13 @@ def rir_for_pose(room_cfg: config.RoomCfg, src_pos: tuple[float,float,float],
     cfg = config.get()
     log.debug(f"Computing RIR for {src_pos = }, {pattern = }, {az_deg = }, {col_deg = }")
     # rebuild room each time to ensure correct state reset between computations
-    room = build_room(room_cfg, cfg.dsp.samplerate)
+    room = build_room(room_cfg, cfg.dsp.datagen_samplerate)
     # add source (with directivity)
     directivity = make_directivity(pattern, az_deg, col_deg)
     room.add_source(src_pos, directivity=directivity)
     room.compute_rir()
     # stack rirs into (R, M) array and return
-    rir = _stack_rirs_rightpad(room, fs=cfg.dsp.samplerate, early_ms=None)  # shape (R, M)
+    rir = _stack_rirs_rightpad(room, fs=cfg.dsp.datagen_samplerate, early_ms=None)  # shape (R, M)
     return rir
 
 class SourcePoses:
@@ -94,7 +95,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
     for i, j, _, loc in tqdm(SourcePoses(room_cfg), desc="Computing RIRs"):
         # ---- cache key & load attempt ----
-        key = make_rir_cache_key(room_cfg, cfg.dsp.samplerate, loc)
+        key = make_rir_cache_key(room_cfg, cfg.dsp.datagen_samplerate, loc)
         rir = try_load_cached_rir(cache_root, key)
 
         # ---- compute if cache miss ----
@@ -104,7 +105,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
             # ---- optionally persist to disk (.npy + manifest) ----
             if save_npy:
                 meta = {
-                    "fs": cfg.dsp.samplerate,
+                    "fs": cfg.dsp.datagen_samplerate,
                     "room": {
                         "dimensions_m": tuple(room_cfg.dimensions_m),
                         "rt60": float(room_cfg.rt60),
@@ -133,7 +134,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
                     start_sample=loc.start_sample,
                     loc=loc,
                     rir=rir,
-                    fs=cfg.dsp.samplerate,
+                    fs=cfg.dsp.datagen_samplerate,
                 )
 
         # ---- optional plots ----
@@ -141,7 +142,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
             # full RIR
             plot_rir(
                 rir=rir,
-                fs=cfg.dsp.samplerate,
+                fs=cfg.dsp.datagen_samplerate,
                 outputfile=cfg.paths.debug_dir / "rir" / f"src_{i}_pos_{j}.png",
                 title=f"RIR src {i}, pos {j} (at sample {loc.start_sample})",
             )
@@ -149,7 +150,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
             early_ms = 80
             plot_rir(
                 rir=rir,
-                fs=cfg.dsp.samplerate,
+                fs=cfg.dsp.datagen_samplerate,
                 outputfile=cfg.paths.debug_dir / "rir" / f"early_{early_ms}ms_src_{i}_pos_{j}.png",
                 title=f"Early {early_ms} ms, RIR src {i}, pos {j} (at sample {loc.start_sample})",
                 early_ms=early_ms,
@@ -157,5 +158,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
 def main():
     cfg = config.get()
-    room = config.load_room("/home/markus/shit/seadge_output/rooms/064218cd7b9b8911f6dfb503588273cc7e4ef815.json") # mhtdebug
-    get_all_rirs(room, save_npy=True, save_rir_plots=cfg.debug)
+    room_files = files_in_path_recursive(cfg.paths.room_dir, "*.room.json")
+    for room_file in room_files:
+        room = config.load_room(room_file)
+        get_all_rirs(room, save_npy=True, save_rir_plots=cfg.debug)

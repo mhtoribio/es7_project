@@ -4,44 +4,61 @@ from pathlib import Path
 import numpy as np
 from functools import lru_cache
 
+import json, hashlib
+from pathlib import Path
+from decimal import Decimal, ROUND_HALF_UP
+from pydantic import BaseModel
+
 def _q(x, q=1e-6):
     if isinstance(x, float): return round(x / q) * q
     if isinstance(x, (list, tuple)): return tuple(_q(t, q) for t in x)
     if isinstance(x, dict): return {k: _q(v, q) for k, v in x.items()}
     return x
 
-def make_room_cache_key(room_cfg) -> str:
-    """
-    Deterministically hash a RoomCfg into a 40-hex SHA-1.
-    Includes: room dims/rt60/max_image_order, expanded mic positions,
-    and all source location histories (pattern, start_sample, az/col, location).
-    Floats are quantized to reduce spurious diffs.
-    """
-    sources_payload = []
-    for s in room_cfg.sources:
-        locs = []
-        for loc in s.location_history:
-            locs.append({
-                "pattern": loc.pattern,
-                "start_sample": int(loc.start_sample),
-                "az_deg": _q(loc.azimuth_deg),
-                "col_deg": _q(loc.colatitude_deg),
-                "location_m": _q(loc.location_m),
-            })
-        sources_payload.append({"location_history": locs})
+def _q_float(x: float, ndigits: int = 6) -> float:
+    # stable, banker-proof rounding via Decimal
+    d = Decimal(str(x)).quantize(Decimal(10) ** -ndigits, rounding=ROUND_HALF_UP)
+    return float(d)
 
-    payload = {
-        "room": {
-            "dimensions_m": _q(room_cfg.dimensions_m),
-            "rt60": _q(room_cfg.rt60),
-            "max_image_order": int(room_cfg.max_image_order),
-        },
-        "mics": [_q(p) for p in room_cfg.mic_pos], # expanded positions
-        "sources": sources_payload,                # full source specs
-    }
+def _canonicalize(obj, *, float_ndigits=6):
+    # Recursively make a deterministic, JSON-friendly payload
+    if isinstance(obj, BaseModel):
+        obj = obj.model_dump(mode="json", exclude_none=True)
+    if isinstance(obj, float):
+        return _q_float(obj, float_ndigits)
+    if isinstance(obj, Path):
+        return str(obj)
+    if isinstance(obj, dict):
+        # sort keys for determinism
+        return {k: _canonicalize(v, float_ndigits=float_ndigits) for k, v in sorted(obj.items())}
+    if isinstance(obj, (list, tuple)):
+        return [_canonicalize(v, float_ndigits=float_ndigits) for v in obj]
+    if isinstance(obj, set):
+        # sets are unordered → sort after canonicalizing
+        return sorted((_canonicalize(v, float_ndigits=float_ndigits) for v in obj), key=lambda x: json.dumps(x, sort_keys=True))
+    return obj
 
-    s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha1(s.encode("utf-8")).hexdigest()
+def make_pydantic_cache_key(
+    model: BaseModel,
+    *,
+    exclude: set | dict | None = None,
+    include: set | dict | None = None,
+    float_ndigits: int = 6,
+    algo: str = "sha1",
+) -> str:
+    """
+    Deterministic content hash for any Pydantic model.
+    - Uses model_dump(mode="json", exclude_none=True) + optional include/exclude
+    - Quantizes floats
+    - Sorts dict keys
+    - Canonicalizes Paths, sets, tuples, etc.
+    """
+    payload = model.model_dump(mode="json", exclude_none=True, exclude=exclude, include=include)
+    canon = _canonicalize(payload, float_ndigits=float_ndigits)
+    s = json.dumps(canon, separators=(",", ":"), sort_keys=True)
+    h = hashlib.new(algo)
+    h.update(s.encode("utf-8"))
+    return h.hexdigest()
 
 def make_rir_cache_key(room_cfg, fs: int, loc) -> str:
     payload = {

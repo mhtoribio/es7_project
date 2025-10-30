@@ -7,12 +7,12 @@ from seadge.utils.log import log
 
 def gen_dynamic_rir_animation(room_cfg: config.RoomCfg, fps=30, duration_s=2, src_idx=0, *, mic=0, nfft=None, db=True):
     cfg = config.get()
-    N = int(duration_s * cfg.dsp.samplerate)
+    N = int(duration_s * cfg.dsp.datagen_samplerate)
 
     # Time-domain instantaneous RIR animation
     animate_rir_time(
         room_cfg.sources[src_idx],
-        N=N, fs=cfg.dsp.samplerate,
+        N=N, fs=cfg.dsp.datagen_samplerate,
         room_cfg=room_cfg, cache_root=cfg.paths.rir_cache_dir,
         xfade_ms=cfg.dsp.rirconv_xfade_ms, normalize=cfg.dsp.rirconv_normalize,
         fps=fps, duration_s=duration_s,
@@ -22,7 +22,7 @@ def gen_dynamic_rir_animation(room_cfg: config.RoomCfg, fps=30, duration_s=2, sr
     # Frequency-response |H(f,t)| animation for one mic
     animate_freqresp(
         room_cfg.sources[src_idx],
-        N=N, fs=cfg.dsp.samplerate,
+        N=N, fs=cfg.dsp.datagen_samplerate,
         room_cfg=room_cfg, cache_root=cfg.paths.rir_cache_dir,
         xfade_ms=cfg.dsp.rirconv_xfade_ms, normalize=cfg.dsp.rirconv_normalize,
         fps=fps, duration_s=duration_s,
@@ -31,10 +31,16 @@ def gen_dynamic_rir_animation(room_cfg: config.RoomCfg, fps=30, duration_s=2, sr
     )
 
 def main():
+    ######################
+    # This is just my testing. Will be removed soon. -Markus
+    # This is just my testing. Will be removed soon. -Markus
+    # This is just my testing. Will be removed soon. -Markus
+    # This is just my testing. Will be removed soon. -Markus
+    ######################
     cfg = config.get()
     room = config.load_room("/home/markus/shit/seadge_output/rooms/064218cd7b9b8911f6dfb503588273cc7e4ef815.json") # mhtdebug
     room_modelling.main()
-    # gen_dynamic_rir_animation(room, src_idx=-1) # DEBUG
+    gen_dynamic_rir_animation(room, src_idx=1) # DEBUG
 
     # mhtdebug
     from scipy.io import wavfile
@@ -43,10 +49,10 @@ def main():
     from scipy.signal import resample_poly
     x = resample_poly(x, 1, 3)
     import numpy as np
-    wavfile.write("/home/markus/shit/isclp-debug/x.wav", cfg.dsp.samplerate, x)
-    y = sim_distant_src(x, room.sources[0], fs=cfg.dsp.samplerate, room_cfg=room, cache_root=cfg.paths.rir_cache_dir, xfade_ms=cfg.dsp.rirconv_xfade_ms)
+    wavfile.write("/home/markus/shit/isclp-debug/x.wav", cfg.dsp.datagen_samplerate, x)
+    y = sim_distant_src(x, room.sources[0], fs=cfg.dsp.datagen_samplerate, room_cfg=room, cache_root=cfg.paths.rir_cache_dir, xfade_ms=cfg.dsp.rirconv_xfade_ms)
     y = (32737 / (np.max(np.abs(y)) + 1e-12)) * y
-    wavfile.write("/home/markus/shit/isclp-debug/test0.wav", cfg.dsp.samplerate, y.astype(np.int16))
-    y = sim_distant_src(x, room.sources[1], fs=cfg.dsp.samplerate, room_cfg=room, cache_root=cfg.paths.rir_cache_dir, xfade_ms=cfg.dsp.rirconv_xfade_ms)
+    wavfile.write("/home/markus/shit/isclp-debug/test0.wav", cfg.dsp.datagen_samplerate, y.astype(np.int16))
+    y = sim_distant_src(x, room.sources[1], fs=cfg.dsp.datagen_samplerate, room_cfg=room, cache_root=cfg.paths.rir_cache_dir, xfade_ms=cfg.dsp.rirconv_xfade_ms)
     y = (32737 / (np.max(np.abs(y)) + 1e-12)) * y
-    wavfile.write("/home/markus/shit/isclp-debug/test1.wav", cfg.dsp.samplerate, y.astype(np.int16))
+    wavfile.write("/home/markus/shit/isclp-debug/test1.wav", cfg.dsp.datagen_samplerate, y.astype(np.int16))

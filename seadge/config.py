@@ -61,11 +61,13 @@ class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
     window_type: str = "sqrt_hann"
-    samplerate: int = 16000
+    datagen_samplerate:     int = 48000
+    enhancement_samplerate: int = 16000
 
     # spectogram figure settings
-    x_tick_prop : Tuple[float, float, float] = (0, hop_size/samplerate, samplerate/hop_size);
-    y_tick_prop : Tuple[float, float, float] = (0, samplerate/(2000*hop_size), hop_size/2);
+    # TODO make this fit with both samplerates
+    x_tick_prop : Tuple[float, float, float] = (0, hop_size/datagen_samplerate, datagen_samplerate/hop_size);
+    y_tick_prop : Tuple[float, float, float] = (0, datagen_samplerate/(2000*hop_size), hop_size/2);
     c_range     : Tuple[int, int]            = (-55, 5);
 
     # RIR convolution settings
@@ -171,6 +173,32 @@ class RoomGenCfg(BaseModel):
     mic_wall_offset: float = 0.05
     mic_height: float = 1.2
 
+class ScenarioGenCfg(BaseModel):
+    # required
+    scenario_duration: Annotated[int,  Field(gt=0)] = 160000
+    min_speaker_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
+    max_speaker_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
+    scenarios_per_room: Annotated[int, Field(gt=0)] = 5
+
+    # optional
+    num_speakers: Annotated[int | None, Field(gt=0)] = None
+    # None => treat as scenario_duration at *use* time
+    min_wavsource_duration: Annotated[int | None, Field(gt=0)] = None
+
+    @model_validator(mode="after")
+    def _cross_checks(self):
+        if self.min_speaker_volume > self.max_speaker_volume:
+            raise ValueError("min_speaker_volume must be <= max_speaker_volume")
+        if self.min_wavsource_duration is not None:
+            if self.min_wavsource_duration > self.scenario_duration:
+                raise ValueError("min_wavsource_duration cannot exceed scenario_duration")
+        return self
+
+    # Convenience: compute the effective value without mutating the stored one
+    @property
+    def effective_min_wavsource_duration(self) -> int:
+        return self.scenario_duration if self.min_wavsource_duration is None else self.min_wavsource_duration
+
 class Config(BaseSettings):
     """
     App settings pulled from:
@@ -197,6 +225,7 @@ class Config(BaseSettings):
     paths: PathsCfg = Field(default_factory=PathsCfg)
     dsp: DspCfg = Field(default_factory=DspCfg)
     roomgen: RoomGenCfg = Field(default_factory=RoomGenCfg)
+    scenariogen: ScenarioGenCfg = Field(default_factory=ScenarioGenCfg)
     debug: bool = Field(default=False)
     clean_zip_files: int = Field(default=1)
 
