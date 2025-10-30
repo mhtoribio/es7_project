@@ -109,84 +109,83 @@ def _eff_xfade_len_for_boundary(
 
 
 def _instantaneous_rir_at_time(
-    schedule: list[tuple[int, np.ndarray]],  # [(start, H(R,M))], sorted
-    n: int,
+    schedule,                         # List[Tuple[int, np.ndarray]] = [(s0_k, H_k(R_k, M)), ...]
+    n: int,                           # output time sample to evaluate
     *,
-    starts: list[int],
-    ends: list[int],          # input end (exclusive) per segment
-    Lx: list[int],            # input slice length per segment
-    Rks: list[int],           # RIR length per segment
-    y_lens: list[int],        # per-segment output length = Lx + Rk - 1
-    Lxf: int,                 # xfade length in samples
-    Rmax: int,
-    N: int,                   # clean length
+    starts: list[int],                # s0_k for each k (same order as schedule)
+    ends: list[int],                  # s1_k = next start or N (same order as schedule)
+    Lx: list[int],                    # segment dry lengths Lx_k = s1_k - s0_k
+    Rks: list[int],                   # R_k = len of each RIR
+    y_lens: list[int],                # not used here but kept for signature compatibility
+    Lxf: int,                         # crossfade length in samples
+    Rmax: int,                        # max RIR length across segments (output length)
+    N: int,                           # total timeline length (for safety)
     dtype=np.float64,
 ) -> np.ndarray:
     """
-    Exact h_n (Rmax, M) matching the fast renderer:
-      - outside fades: sum all active segments' windowed taps,
-      - inside [b, b+L_eff): convex mix of the two adjacent segments' windowed taps only.
-    """
-    if not schedule:
-        return np.zeros((0, 0), dtype=dtype)
+    Build the 'effective' instantaneous RIR h_n of shape (Rmax, M) at time n,
+    consistent with the fast path:
 
-    K = len(schedule)
-    M = schedule[0][1].shape[1]
+        y = sum_k  conv( H_k,  (w_k * x_seg_k) )
+
+    where w_k = _pre_window(Lx_k, Lxf, first=(k==0), last=(k==K-1)), applied to
+    x[s0_k : s1_k + (Lxf if k < K-1 else 0)] (last segment has no tail).
+
+    This function returns h_n such that:
+        y[n] = sum_tau h_n[tau] * x[n - tau]
+    """
+    # Import here to avoid circulars; uses your exact window definition
+    from seadge.utils.distant_sim import _pre_window  # reuse your windowing
+
+    if len(schedule) == 0:
+        return np.zeros((Rmax, 0), dtype=dtype)
+
+    # Infer M from the first RIR
+    _, H0 = schedule[0]
+    M = H0.shape[1]
     h = np.zeros((Rmax, M), dtype=dtype)
 
-    # --------- check if inside an *effective* forward fade ----------
-    if K >= 2 and Lxf > 0:
-        boundaries = starts[1:]
-        j = int(np.searchsorted(boundaries, n, side="right") - 1)  # last boundary <= n
-        if 0 <= j < (K - 1):
-            b = boundaries[j]
-            u = n - b
-            if u >= 0:
-                L_eff = _eff_xfade_len_for_boundary(
-                    s0_prev=starts[j],  y_prev_len=y_lens[j],
-                    s0_next=starts[j+1], y_next_len=y_lens[j+1],
-                    b=b, Lxf=Lxf,
-                )
-                if 0 <= u < L_eff:
-                    # two-segment convex mix (overwrite semantics)
-                    w_down, w_up = _xfade_windows(L_eff)
+    K = len(schedule)
 
-                    # prev segment j
-                    H_prev, R_prev = schedule[j][1], Rks[j]
-                    idx_prev = n - starts[j]  # output index for seg j at time n
-                    if 0 <= idx_prev <= (Lx[j] + R_prev - 2):
-                        r_low  = max(0, idx_prev - (Lx[j] - 1))
-                        r_high = min(R_prev - 1, idx_prev)
-                        if r_high >= r_low:
-                            end = min(Rmax, r_high + 1)
-                            h[r_low:end, :] += w_down[u] * H_prev[r_low:end, :]
-
-                    # next segment j+1
-                    H_next, R_next = schedule[j+1][1], Rks[j+1]
-                    idx_next = n - starts[j+1]  # equals u
-                    if 0 <= idx_next <= (Lx[j+1] + R_next - 2):
-                        r_low  = max(0, idx_next - (Lx[j+1] - 1))
-                        r_high = min(R_next - 1, idx_next)
-                        if r_high >= r_low:
-                            end = min(Rmax, r_high + 1)
-                            h[r_low:end, :] += w_up[u] * H_next[r_low:end, :]
-
-                    return h
-                # else: nominally within Lxf but beyond L_eff → fall through to sum
-
-    # --------- not in effective fade: sum all active segments ----------
-    for k in range(K):
-        s0k, Hk = starts[k], schedule[k][1]
-        Rk = Rks[k]
-        # active if n within this segment's output span
-        if not (s0k <= n <= (s0k + Lx[k] + Rk - 2)):
+    for k, (s0, Hk) in enumerate(schedule):
+        Rk = Hk.shape[0]
+        if Rk == 0:
             continue
-        idx = n - s0k
-        r_low  = max(0, idx - (Lx[k] - 1))
-        r_high = min(Rk - 1, idx)
-        if r_high >= r_low:
-            end = min(Rmax, r_high + 1)
-            h[r_low:end, :] += Hk[r_low:end, :]
+
+        # Segment geometry
+        seg_len = int(Lx[k])                     # Lx_k = s1 - s0
+        has_tail = (k < K - 1)
+        win_len = seg_len + (Lxf if has_tail else 0)
+
+        if win_len <= 0:
+            continue
+
+        # Exact same window the fast path multiplies the clean segment with
+        win = _pre_window(seg_len, Lxf, first=(k == 0), last=(k == K - 1))
+        if not has_tail:
+            # The fast path slices off any tail on the last segment
+            win = win[:seg_len]
+
+        # Indices inside the window for each RIR tap τ: m = n - τ - s0
+        # We only keep taps whose window sample is defined and nonzero.
+        tau = np.arange(Rk)
+        m = n - s0 - tau                        # window sample index corresponding to each τ
+
+        valid = (m >= 0) & (m < win_len)
+        if not np.any(valid):
+            continue
+
+        # Clip to output Rmax just in case
+        valid_idxs = np.nonzero(valid)[0]
+        if valid_idxs[-1] >= Rmax:
+            valid_idxs = valid_idxs[valid_idxs < Rmax]
+            if valid_idxs.size == 0:
+                continue
+
+        wvals = win[m[valid_idxs]].astype(dtype, copy=False)   # (r,)
+        # Accumulate contribution: h[τ, :] += w_k[n-τ] * H_k[τ, :]
+        h[valid_idxs, :] += (Hk[valid_idxs, :].astype(dtype, copy=False) *
+                             wvals[:, None])
 
     return h
 
@@ -203,72 +202,63 @@ def convolve_time_varying_exact_via_hn(
     dtype: np.dtype = np.float64,
 ) -> np.ndarray:
     """
-    Ground-truth renderer using the *instantaneous* RIR h_n you animate:
-      y[n,:] = sum_r h_n[r,:] * x[n-r]
-    h_n is built to be mathematically identical to sim_distant_src.
-    """
-    x = np.asarray(clean, float)
-    N = x.shape[0]
+    Exact time-domain rendering using the *instantaneous effective RIR* h_n produced by
+    the same windowing logic as the fast path.
 
-    schedule = _load_schedule(src, fs=fs, room_cfg=room_cfg, cache_root=cache_root, normalize=normalize)
-    if not schedule:
+    For each output time n we compute:
+        y[n] = sum_{tau=0}^{Rmax-1} h_n[tau]^T * x[n - tau]
+    with zero-padding outside x's support.
+
+    Returns: (N + Rmax - 1, M)
+    """
+    clean = np.asarray(clean, dtype=float)
+    N = clean.shape[0]
+
+    # Geometry & cached RIRs (mirrors animation helpers)
+    schedule, starts, Rks, Rmax, M, Lxf = _make_schedule_geometry_for_anim(
+        src, fs=fs, room_cfg=room_cfg, cache_root=cache_root,
+        xfade_ms=xfade_ms, normalize=normalize
+    )
+
+    if len(schedule) == 0:
+        # match fast path behavior when no RIRs are present
         return np.zeros((N, len(room_cfg.mic_pos)), dtype=dtype)
 
-    # Precompute geometry
-    K       = len(schedule)
-    starts  = [int(s) for s, _ in schedule]
-    Rks     = [H.shape[0] for _, H in schedule]
-    Rmax    = max(Rks)
-    M       = schedule[0][1].shape[1]
-    ends    = [starts[k+1] if k+1 < K else N for k in range(K)]     # input end (exclusive)
-    Lx      = [max(0, ends[k] - starts[k]) for k in range(K)]       # input slice length
-    y_lens  = [Lx[k] + Rks[k] - 1 for k in range(K)]
-    Lxf     = int(round(xfade_ms * 1e-3 * fs))
+    # Segment end indices and derived lengths (used by _instantaneous_rir_at_time)
+    ends   = [starts[k+1] if k+1 < len(starts) else N for k in range(len(starts))]
+    Lx     = [max(0, ends[k] - starts[k]) for k in range(len(starts))]
+    y_lens = [Lx[k] + Rks[k] - 1 for k in range(len(starts))]  # not strictly needed, kept for API
 
-    y = np.zeros((N + Rmax - 1, M), dtype=dtype)
+    Nout = N + Rmax - 1
+    y = np.zeros((Nout, M), dtype=dtype)
 
-    for n in range(y.shape[0]):
-                # --- build instantaneous kernel (Rmax, M) ---
+    # For each output sample n, build instantaneous kernel h_n and do a short dot
+    for n in range(Nout):
+        # Instantaneous kernel (Rmax, M)
         h_n = _instantaneous_rir_at_time(
             schedule, n,
             starts=starts, ends=ends, Lx=Lx, Rks=Rks, y_lens=y_lens,
-            Lxf=Lxf, Rmax=Rmax, N=N, dtype=dtype,
+            Lxf=Lxf, Rmax=Rmax, N=N, dtype=dtype
         )
 
-        # number of taps that can contribute to y[n]
-        r_need = min(Rmax, n + 1, N)
+        # Valid overlap between x and h_n:
+        # tau indices such that 0 <= n - tau < N  and  0 <= tau < Rmax
+        tau_end   = min(n, Rmax - 1)
+        tau_start = max(0, n - (N - 1))
+        if tau_end < tau_start:
+            continue
 
-        # --- gather input slice, pad both sides if needed, and reverse ---
-        x_start = n - r_need + 1
-        x_end   = n + 1
-        # clip to [0, N]
-        left_clip  = max(0, -x_start)
-        right_clip = max(0, x_end - N)
+        # Map to x segment indices [j0..j1], then reverse to align with ascending tau
+        j0 = n - tau_end
+        j1 = n - tau_start
+        xi = clean[j0:j1 + 1][::-1].astype(dtype, copy=False)  # length r
 
-        xi_core = x[max(0, x_start) : min(x_end, N)]
-        if left_clip or right_clip:
-            xi = np.pad(xi_core, (left_clip, right_clip), mode="constant")
-        else:
-            xi = xi_core
-        # ensure exact length r_need
-        if xi.shape[0] != r_need:
-            if xi.shape[0] < r_need:
-                xi = np.pad(xi, (0, r_need - xi.shape[0]), mode="constant")
-            else:
-                xi = xi[:r_need]
-        xi = xi[::-1]  # (r_need,)
-
-        # --- make kernel rows match xi length exactly ---
-        k = xi.shape[0]  # should equal r_need
-        if h_n.shape[0] < k:
-            Huse = np.pad(h_n, ((0, k - h_n.shape[0]), (0, 0)), mode="constant")
-        else:
-            Huse = h_n[:k, :]
-
-        # (k,) @ (k, M) -> (M,)
-        y[n, :] = xi @ Huse
+        Hslice = h_n[tau_start:tau_end + 1, :]                 # (r, M)
+        # Accumulate sample n
+        y[n, :] = xi @ Hslice
 
     return y
+
 
 # ----------------------------------------------------------------------
 # FAST renderer: convolve-each-segment, then crossfade outputs (production)
@@ -311,8 +301,8 @@ def sim_distant_src(
 
     seg_out: List[Tuple[int, np.ndarray]] = []  # (s0, yk)
     for idx, (s0, H) in enumerate(schedule):
-        last = idx+1 < len(schedule)
-        s1 = schedule[idx+1][0] if last else N
+        last = idx+1 == len(schedule)
+        s1 = schedule[idx+1][0] if not last else N
         s0 = max(0, min(s0, N))
         s1 = max(s0, min(s1, N))
         win = _pre_window(s1-s0, xfade_len, first = idx==0, last=last)
