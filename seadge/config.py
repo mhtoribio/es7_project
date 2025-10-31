@@ -246,7 +246,7 @@ class ConfigError(RuntimeError):
 # Public API
 # -----------------------------------------------------------------------------
 
-def dumpconfig():
+def dumpconfig(args):
     from pathlib import PurePath
     def _replace_paths(obj: Any) -> Any:
         """Recursively replace pathlib Paths with strings inside common containers."""

@@ -230,3 +230,21 @@ def load_scenario(path: Path) -> Scenario:
         raise ValueError("Error parsing scenario file") from e
     scen = Scenario.model_validate(data)
     return scen
+
+# -----------------------------------------------------------------------------
+# Commandline funcs
+# -----------------------------------------------------------------------------
+
+def dumpscenario(args):
+    cfg = config.get()
+    log.info(f"Dumping values for scenario {args.id}")
+    scen = load_scenario(cfg.paths.scenario_dir / f"{args.id}.scenario.json")
+
+    if args.room:
+        log.info(f"Room id {scen.room_id}")
+        with open(cfg.paths.room_dir / f"{scen.room_id}.room.json", "r") as f:
+            print(f.read())
+
+    if args.wav:
+        log.info("Distant wav file path")
+        print(cfg.paths.distant_dir / f"{args.id}.wav")
