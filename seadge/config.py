@@ -176,8 +176,8 @@ class RoomGenCfg(BaseModel):
 class ScenarioGenCfg(BaseModel):
     # required
     scenario_duration: Annotated[int,  Field(gt=0)] = 160000
-    min_speaker_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
-    max_speaker_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
+    min_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
+    max_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
     scenarios_per_room: Annotated[int, Field(gt=0)] = 5
 
     # optional
@@ -187,7 +187,7 @@ class ScenarioGenCfg(BaseModel):
 
     @model_validator(mode="after")
     def _cross_checks(self):
-        if self.min_speaker_volume > self.max_speaker_volume:
+        if self.min_interference_volume > self.max_interference_volume:
             raise ValueError("min_speaker_volume must be <= max_speaker_volume")
         if self.min_wavsource_duration is not None:
             if self.min_wavsource_duration > self.scenario_duration:

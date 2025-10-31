@@ -42,8 +42,8 @@ def gen_one_scenario(
     *,
     fs_target: int,                   # target samplerate (e.g., cfg.dsp.samplerate)
     scenario_duration: int,           # total timeline in samples (fs_target domain)
-    min_speaker_volume: float,
-    max_speaker_volume: float,
+    min_interference_volume: float,
+    max_interference_volume: float,
     num_speakers: int | None = None,  # default: len(room.sources)
     min_wavsource_duration: int | None = None,  # None -> equals scenario_duration
     rng: np.random.Generator | None = None,
@@ -53,7 +53,7 @@ def gen_one_scenario(
 
     Constraints:
       - No reuse of WAV files (requires len(wav_files) >= num_speakers).
-      - Per-speaker volume ~ Uniform[min_speaker_volume, max_speaker_volume].
+      - Per-speaker volume ~ Uniform[min_interference_volume, max_interference_volume].
       - Random target index.
       - Each sourceloc has ≤ 1 wavsource (so no per-sourceloc overlap by construction).
       - Returns None if constraints cannot be satisfied.
@@ -65,8 +65,8 @@ def gen_one_scenario(
     if not wav_files:
         log.error("gen_one_scenario: No wav files available")
         return None
-    if min_speaker_volume > max_speaker_volume:
-        log.error(f"gen_one_scenario: ({min_speaker_volume=}) > ({max_speaker_volume=})")
+    if min_interference_volume > max_interference_volume:
+        log.error(f"gen_one_scenario: ({min_interference_volume=}) > ({max_interference_volume=})")
         return None
 
     if num_speakers is None:
@@ -133,7 +133,7 @@ def gen_one_scenario(
                 return None
             delay = int(rng.integers(0, max_delay + 1))
 
-        volume = float(rng.uniform(min_speaker_volume, max_speaker_volume))
+        volume = float(rng.uniform(min_interference_volume, max_interference_volume))
 
         wavsources.append(
             WavSource(
@@ -149,6 +149,7 @@ def gen_one_scenario(
 
     # Split target / others
     target = wavsources[target_idx]
+    target.volume = 1.0 # target always at volume 1.0
     others = [w for j, w in enumerate(wavsources) if j != target_idx]
 
     # Assemble Scenario
@@ -180,8 +181,8 @@ def gen_scenarios(room_dir: Path, outpath: Path, wav_dir: Path, scengen_cfg: con
                 room, wav_files,
                 fs_target=fs,
                 scenario_duration=scengen_cfg.scenario_duration,
-                min_speaker_volume=scengen_cfg.min_speaker_volume,
-                max_speaker_volume=scengen_cfg.max_speaker_volume,
+                min_interference_volume=scengen_cfg.min_interference_volume,
+                max_interference_volume=scengen_cfg.max_interference_volume,
                 num_speakers=scengen_cfg.num_speakers,
                 min_wavsource_duration=scengen_cfg.effective_min_wavsource_duration,
             )

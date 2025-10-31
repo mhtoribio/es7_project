@@ -407,7 +407,7 @@ def animate_rir_time(
 
     # First pass: determine y-limits (optional but nice)
     ymax = 0.0
-    for n in tqdm(t_idx, desc="Scanning RIR range for y-limits"):
+    for n in t_idx:
         h_n = _instantaneous_rir_at_time(
             schedule, int(n),
             starts=starts, ends=ends, Lx=Lx, Rks=Rks, y_lens=y_lens,
@@ -529,7 +529,7 @@ def animate_freqresp(
 
     # First pass: y-limits
     y_min, y_max = +np.inf, -np.inf
-    for n in tqdm(t_idx, desc="Scanning FR range for y-limits"):
+    for n in t_idx:
         h_n = _instantaneous_rir_at_time(
             schedule, int(n),
             starts=starts, ends=ends, Lx=Lx, Rks=Rks, y_lens=y_lens,
