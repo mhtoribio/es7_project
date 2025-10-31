@@ -246,6 +246,28 @@ class ConfigError(RuntimeError):
 # Public API
 # -----------------------------------------------------------------------------
 
+def dumpconfig():
+    from pathlib import PurePath
+    def _replace_paths(obj: Any) -> Any:
+        """Recursively replace pathlib Paths with strings inside common containers."""
+        if isinstance(obj, dict):
+            # Also convert keys if they are Paths
+            return {_replace_paths(k): _replace_paths(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_replace_paths(x) for x in obj]
+        if isinstance(obj, tuple):
+            return tuple(_replace_paths(x) for x in obj)
+        if isinstance(obj, set):
+            return {_replace_paths(x) for x in obj}
+        if isinstance(obj, PurePath):  # catches PosixPath, WindowsPath, etc.
+            return str(obj)
+        return obj
+
+    import json
+    obj = as_dict()
+    obj = _replace_paths(obj)
+    print(json.dumps(obj, indent=2, ensure_ascii=False))
+
 def load_default() -> Config:
     """Load the default config. ONLY RECOMMENDED FOR TESTING."""
     cfg = Config()

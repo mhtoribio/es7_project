@@ -1,10 +1,10 @@
 from seadge.commandline import common
 from seadge.commandline import datagen
-from seadge.commandline import dumpconfig
+from seadge.commandline import dump
 
 commands = {
     "datagen": datagen.main,
-    "dumpconfig": dumpconfig.main
+    "dump": dump.main,
 }
 
 def main():
