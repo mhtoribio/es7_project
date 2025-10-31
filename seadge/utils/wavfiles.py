@@ -34,8 +34,8 @@ def load_and_resample_source(source_spec: dict) -> np.ndarray:
 
 def write_wav(path: pathlib.Path, x: np.ndarray, fs: Optional[int] = None):
     cfg = config.get()
-    log.debug(f"Writing wav file {path.relative_to(cfg.paths.output_dir)}")
+    log.debug(f"Writing {x.shape} array to wav file {path.relative_to(cfg.paths.output_dir)}")
     if fs is None:
-        wavfile.write(path, x, cfg.dsp.datagen_samplerate)
+        wavfile.write(path, cfg.dsp.datagen_samplerate, x)
     else:
-        wavfile.write(path, x, fs)
+        wavfile.write(path, fs, x)

@@ -309,27 +309,6 @@ def sim_distant_src(
         x_clean_seg = clean[s0:s1+xfade_len]
         x_seg = x_clean_seg * win if (idx+1 < len(schedule)) else x_clean_seg * win[0: s1-s0]
         yk = _convolve_seg(x_seg, H, method=method)  # (len+R-1, M)
-
-        # mhtdebug
-        # import matplotlib.pyplot as plt
-        # plt.plot(win)
-        # plt.title("win")
-        # plt.savefig("/home/markus/shit/win.png")
-        # plt.close()
-        # plt.plot(x_clean_seg)
-        # plt.title("clean_seg")
-        # plt.savefig("/home/markus/shit/clean_seg.png")
-        # plt.close()
-        # plt.plot(x_seg)
-        # plt.title("x_seg")
-        # plt.savefig("/home/markus/shit/seg.png")
-        # plt.close()
-        # plt.plot(yk)
-        # plt.title("yk")
-        # plt.savefig("/home/markus/shit/yk.png")
-        # plt.close()
-        # exit()
-
         seg_out.append((s0, yk))
 
     # 3) Overlap-add all segments
