@@ -14,21 +14,21 @@ from sklearn.model_selection import train_test_split
 #Add GPU (Device to this when it works on CPU)
 
 class TemporalBlock(nn.Module):
-    def __init__(self, input_size, output_size, kernel_size, stride, dilation, padding, dropout=0.2):
+    def __init__(self, input_channels, output_channels, kernel_size, stride, dilation, padding, dropout=0.2):
         super().__init__()
 
         # First 1D convolution layer
-        self.conv1 = nn.Conv1d(input_size, output_size, kernel_size,
+        self.conv1 = nn.Conv1d(input_channels, output_channels, kernel_size,
                                stride=stride, padding=padding, dilation=dilation)
         # Second 1D convolution layer
-        self.conv2 = nn.Conv1d(output_size, output_size, kernel_size,
+        self.conv2 = nn.Conv1d(output_channels, output_channels, kernel_size,
                                stride=stride, padding=padding, dilation=dilation)
 
         # Dropout layer for regularization
         self.dropout = nn.Dropout(dropout)
 
         # If the input and output channels differ, use a 1x1 conv to match dimensions for residual connection
-        self.downsample = nn.Conv1d(input_size, output_size, 1) if input_size != output_size else None
+        self.downsample = nn.Conv1d(input_channels, output_channels, 1) if input_channels != output_channels else None
 
         # Initialize weights properly (important for stability)
         self.init_weights()
@@ -95,10 +95,9 @@ class TCN(nn.Module):
 
 # Load clean, distant and RIR
 CLEAN_FOLDER = r"C:\UNI\7.Semester\mlp_data_rir\clean_speech\resampled"
-DISTANT_FOLDER = r"C:\UNI\7.Semester\mlp_data_rir\distant_speech" 
-RIR_FOLDER = r"C:\UNI\7.Semester\mlp_data_rir\rir_static"
+DISTANT_FOLDER = r"C:\UNI\7.Semester\mlp_data_rir\distant_speech"
 
-def prepare_files(clean_folder, distant_folder, rir_folder, max_files):
+def prepare_files(clean_folder, distant_folder, max_files):
     # Folder to store resampled clean files
     resampled_clean_folder = os.path.join(clean_folder, "resampled")
     os.makedirs(resampled_clean_folder, exist_ok=True)
@@ -243,7 +242,7 @@ def train_psd_model(model, x_tensor, y_tensor, epochs, batch_size):
     train_dataset = torch.utils.data.TensorDataset(x_train, y_train)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-5, lr=0.0001) # maybe add weight_decay
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-5, lr=0.005) # maybe add weight_decay
     # Scheduler is used to adjust learning rate dynamically
     # If validation loss hasn’t improved in 10 epochs, the learning rate halves.
     #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, factor=0.5)
@@ -278,8 +277,8 @@ def train_psd_model(model, x_tensor, y_tensor, epochs, batch_size):
         avg_train_loss = epoch_train_loss / len(train_loader)
         train_losses.append(avg_train_loss)
 
-        if epoch % 10 == 0:
-            print(f'Epoch: {epoch:3d} and avg. loss: {avg_train_loss:.6f}')
+        if epoch % 1 == 0:
+            print(f'Epoch: {epoch:3d} and avg. loss: {avg_train_loss:.10f}')
 
     # Testing phase (out of the epoch for loop, only evaluating after all epochs)
     model.eval()
@@ -297,7 +296,7 @@ def debug_file_pairs():
     print("🔍 Starting debug for PSD tensor creation...\n")
 
     # Step 1: Prepare pairs (file paths)
-    data_pairs = prepare_files(CLEAN_FOLDER, DISTANT_FOLDER, RIR_FOLDER, max_files=8000)
+    data_pairs = prepare_files(CLEAN_FOLDER, DISTANT_FOLDER, max_files=1000)
     print(f"✅ Found {len(data_pairs)} valid clean/distant pairs.\n")
 
     all_pairs = []
@@ -342,8 +341,8 @@ def debug_file_pairs():
 
     # Step 6: Initialize model
     model = TCN(
-        input_size=input_size,
-        output_size=output_size,
+        input_channels=input_size,
+        output_channels=output_size,
         num_channels=[256, 256, 256],  # depth of network
         kernel_size=3,
         dropout=0.2
@@ -364,7 +363,7 @@ def debug_file_pairs():
     plt.show()
 
 def main():
-    data_pairs = prepare_files(CLEAN_FOLDER, DISTANT_FOLDER, RIR_FOLDER, max_files=100)
+    data_pairs = prepare_files(CLEAN_FOLDER, DISTANT_FOLDER, max_files=100)
     all_pairs = []
   
     # iterate over the data pairs
@@ -384,8 +383,8 @@ def main():
 
     # Initialize model
     model = TCN(
-        input_size=input_size,
-        output_size=output_size,
+        input_channels=input_size,
+        output_channels=output_size,
         num_channels=[256, 256, 256],  # depth of network
         kernel_size=3,
         dropout=0.2
