@@ -63,6 +63,8 @@ class DspCfg(BaseModel):
     window_type: str = "sqrt_hann"
     datagen_samplerate:     int = 48000
     enhancement_samplerate: int = 16000
+    early_ms: float = 32.0
+    early_taper_ms: float = 0.0
 
     # spectogram figure settings
     # TODO make this fit with both samplerates

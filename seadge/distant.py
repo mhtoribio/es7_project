@@ -46,6 +46,8 @@ def simulate_one_scenario(
         xfade_ms: float,
         convmethod: str,
         normalize: str | None,
+        early_ms: float,
+        early_taper_ms: float,
         ) -> tuple[str, np.ndarray]:
     scen_hash = make_pydantic_cache_key(scen)
     log.debug(f"Simulating scenario {scen_hash}")
@@ -81,6 +83,8 @@ def simulate_one_scenario(
                 xfade_ms=xfade_ms,
                 method=convmethod,
                 normalize=normalize,
+                early_ms=None,
+                early_taper_ms=0.0,
                 )
         distant_src_ch.append(x)
 
@@ -92,6 +96,25 @@ def simulate_one_scenario(
             path.parent.mkdir(parents=True, exist_ok=True)
             log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
             wavfile.write(path, fs, distant)
+
+    # Debug files (early source images)
+    if debug_dir:
+        log.debug(f"Writing debug files for early source images (scenario: {scen_hash})")
+        for i, clean in enumerate(clean_src_ch):
+            s = sim_distant_src(
+                    clean, room.sources[i],
+                    fs=fs, room_cfg=room,
+                    cache_root=rir_cache_dir,
+                    xfade_ms=xfade_ms,
+                    method=convmethod,
+                    normalize=normalize,
+                    early_ms=early_ms,
+                    early_taper_ms=early_taper_ms,
+                    )
+            path = debug_dir / scen_hash / f"early_src{i}.wav"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
+            wavfile.write(path, fs, s)
 
     # Mix distant sources to single
     shapes = [x.shape for x in distant_src_ch]
@@ -115,6 +138,8 @@ def simulate_scenarios(
         xfade_ms: float,
         convmethod: str,
         normalize: str | None,
+        early_ms: float,
+        early_taper_ms: float,
         ):
     scenario_files = files_in_path_recursive(scenario_dir, "*.scenario.json")
     log.info(f"Simulating {len(scenario_files)} scenarios")
@@ -129,6 +154,8 @@ def simulate_scenarios(
             xfade_ms=xfade_ms,
             convmethod=convmethod,
             normalize=normalize,
+            early_ms=early_ms,
+            early_taper_ms=early_taper_ms,
         )
         write_wav(outpath / f"{scen_hash}.wav", x, fs=fs)
 
@@ -153,4 +180,6 @@ def main():
         xfade_ms=cfg.dsp.rirconv_xfade_ms,
         convmethod=cfg.dsp.rirconv_method,
         normalize=cfg.dsp.rirconv_normalize,
+        early_ms=cfg.dsp.early_ms,
+        early_taper_ms=cfg.dsp.early_taper_ms,
     )

@@ -84,7 +84,7 @@ def _shard_dir(root: Path, key: str) -> Path:
 
 # --- IO ---
 @lru_cache(maxsize=256)
-def load_rir_mem_or_die(key: str, cache_root_str: str) -> np.ndarray | None:
+def load_rir_mem_or_die(key: str, cache_root_str: str) -> np.ndarray:
     """LRU wrapper around disk cache. Returns a *regular* ndarray (not memmap)."""
     arr = try_load_cached_rir(Path(cache_root_str), key)
     if arr is None:

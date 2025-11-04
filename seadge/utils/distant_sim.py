@@ -71,6 +71,55 @@ def _normalize_rir(H: np.ndarray, mode: Optional[str]) -> np.ndarray:
         return H / g
     return H
 
+def _early_rir(
+    H_RM: np.ndarray,
+    *,
+    fs: int,
+    early_ms: float,
+    taper_ms: float = 0.0,
+) -> np.ndarray:
+    """
+    Time-domain 'early' part of an M-channel RIR H_RM (R, M).
+
+    - early_ms: keep energy up to this time (in ms)
+    - taper_ms: optional cosine taper length (in ms) at the end of the early part.
+                0.0 => pure rectangular window.
+
+    Returns: H_early with the same shape (R, M).
+    """
+    H = np.asarray(H_RM, float)
+    R, M = H.shape
+
+    # Early cutoff in samples
+    early_samp = int(round(early_ms * 1e-3 * fs))
+    early_samp = max(0, min(early_samp, R))
+    if early_samp == 0:
+        return np.zeros_like(H)
+
+    w = np.zeros(R, dtype=float)
+
+    if taper_ms <= 0.0:
+        # Pure rectangular: keep [0, early_samp)
+        w[:early_samp] = 1.0
+    else:
+        L_taper = int(round(taper_ms * 1e-3 * fs))
+        L_taper = max(1, min(L_taper, early_samp))
+        flat_end = early_samp - L_taper
+
+        # 1) Flat region
+        if flat_end > 0:
+            w[:flat_end] = 1.0
+
+        # 2) Cosine taper from 1 -> 0 over [flat_end, early_samp)
+        # half-cosine from 0..pi/2 gives smooth descent
+        t = np.linspace(0.0, np.pi / 2.0, L_taper, endpoint=False)
+        taper = np.cos(t)  # starts at 1, goes toward 0
+        w[flat_end:early_samp] = taper
+
+        # rest stays 0
+
+    return H * w[:, None]
+
 def _load_schedule(
     src: config.SourceSpec,
     *,
@@ -78,6 +127,8 @@ def _load_schedule(
     room_cfg,
     cache_root: Path,
     normalize: Optional[str],
+    early_ms: float | None = None,
+    early_taper_ms: float = 0.0,
 ) -> List[Tuple[int, np.ndarray]]:
     """
     Load [(start_sample, H(R,M)), ...] from cache. No recompute; raises on miss.
@@ -87,6 +138,8 @@ def _load_schedule(
     for loc in src.location_history:
         key = make_rir_cache_key(room_cfg, fs, loc)
         H = load_rir_mem_or_die(key, str(cache_root))  # raises if missing
+        if early_ms is not None:
+            H = _early_rir(H, fs=fs, early_ms=early_ms, taper_ms=early_taper_ms)
         H = _normalize_rir(H, normalize)
         schedule.append((int(loc.start_sample), H))
     schedule.sort(key=lambda t: t[0])
@@ -271,6 +324,8 @@ def sim_distant_src(
     fs: int,
     room_cfg,             # RoomCfg (mic_pos already expanded)
     cache_root: Path,
+    early_ms: float | None = None,
+    early_taper_ms: float = 0.0,
     xfade_ms: float = 64.0,
     method: str = "oaconv",           # "oaconv" or "fft"
     normalize: Optional[str] = "direct",  # None|"direct"|"energy"
@@ -288,7 +343,7 @@ def sim_distant_src(
 
     # 1) schedule: (start_sample, H(R,M))
     schedule: List[Tuple[int, np.ndarray]] = _load_schedule(
-        src, fs=fs, room_cfg=room_cfg, cache_root=cache_root, normalize=normalize
+        src, fs=fs, room_cfg=room_cfg, cache_root=cache_root, normalize=normalize, early_ms=early_ms, early_taper_ms=early_taper_ms
     )
 
     if not schedule:
