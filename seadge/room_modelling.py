@@ -93,7 +93,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
     cache_root = cfg.paths.rir_cache_dir
 
-    for i, j, _, loc in tqdm(SourcePoses(room_cfg), desc="Computing RIRs"):
+    for i, j, _, loc in SourcePoses(room_cfg):
         # ---- cache key & load attempt ----
         key = make_rir_cache_key(room_cfg, cfg.dsp.datagen_samplerate, loc)
         rir = try_load_cached_rir(cache_root, key)
@@ -159,6 +159,6 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 def main():
     cfg = config.get()
     room_files = files_in_path_recursive(cfg.paths.room_dir, "*.room.json")
-    for room_file in room_files:
+    for room_file in tqdm(room_files, desc="Computing RIRs for rooms"):
         room = config.load_room(room_file)
         get_all_rirs(room, save_npy=True, save_rir_plots=cfg.debug)

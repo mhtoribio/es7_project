@@ -5,6 +5,7 @@ import json
 import hashlib
 import math
 import numpy as np
+from tqdm import tqdm
 
 from seadge.utils.scenario import Scenario, WavSource
 from seadge.utils.files import files_in_path_recursive
@@ -164,7 +165,7 @@ def gen_one_scenario(
 def gen_scenarios(room_dir: Path, outpath: Path, wav_dir: Path, scengen_cfg: config.ScenarioGenCfg, fs: int):
     room_files = files_in_path_recursive(room_dir, "*.room.json")
     wav_files = files_in_path_recursive(wav_dir, "*.wav")
-    for room_path in room_files:
+    for room_path in tqdm(room_files, desc="Generating scenarios for rooms"):
         room = config.load_room(room_path)
         log.info(f"Generating {scengen_cfg.scenarios_per_room} scenarios for room {make_pydantic_cache_key(room)}")
         for i in range(scengen_cfg.scenarios_per_room):

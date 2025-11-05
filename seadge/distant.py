@@ -2,6 +2,7 @@ from scipy.io import wavfile
 from scipy.signal import resample_poly
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
 
 from seadge import config
 from seadge.utils.distant_sim import animate_rir_time, animate_freqresp, sim_distant_src
@@ -182,7 +183,7 @@ def simulate_scenarios(
         ):
     scenario_files = files_in_path_recursive(scenario_dir, "*.scenario.json")
     log.info(f"Simulating {len(scenario_files)} scenarios")
-    for scenfile in scenario_files:
+    for scenfile in tqdm(scenario_files, desc="Simulating scenarios"):
         scen = load_scenario(scenfile)
         scen_hash, x = simulate_one_scenario(
             scen=scen,
