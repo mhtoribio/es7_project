@@ -154,7 +154,9 @@ def train_model(
         if val_loss < best_val:
             best_val = val_loss
             # Save best model
-            torch.save(model.state_dict(), outdir / "best_psdnet.pt")
+            path = outdir / "best_psdnet.pt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(model.state_dict(), path)
 
 def main():
     cfg = config.get()
