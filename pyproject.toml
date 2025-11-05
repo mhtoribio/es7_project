@@ -21,7 +21,8 @@ dependencies = [
   "matplotlib>=3.10",
   "pyroomacoustics>=0.7.7",
   "tqdm>=4.67",
-  "requests>=2.32"
+  "requests>=2.32",
+  "torch>=2.9",
 ]
 
 # optional URL field based on your setup.py

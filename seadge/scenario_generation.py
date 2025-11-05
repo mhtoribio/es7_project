@@ -11,19 +11,8 @@ from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
 from seadge.utils.wavfiles import wavfile_samplerate
 from seadge.utils.cache import make_pydantic_cache_key
+from seadge.utils.dsp import resampling_values
 from seadge import config
-
-def _resampling_values(fs_from: int, fs_to: int) -> tuple[int, int]:
-    """
-    Compute integer (interpolation, decimation) to map fs_from -> fs_to using gcd.
-    Returns (L, M) such that L/M = fs_to/fs_from and both are ints.
-    """
-    fs_from = int(fs_from)
-    fs_to   = int(fs_to)
-    if fs_from <= 0 or fs_to <= 0:
-        raise ValueError("Sample rates must be positive integers")
-    g = math.gcd(fs_from, fs_to)
-    return (fs_to // g, fs_from // g)
 
 
 def _rel_wav_path(p: Path, base: Path) -> str:
@@ -41,11 +30,11 @@ def gen_one_scenario(
     wav_files: list[Path],
     *,
     fs_target: int,                   # target samplerate (e.g., cfg.dsp.samplerate)
-    scenario_duration: int,           # total timeline in samples (fs_target domain)
+    scenario_duration_s: float,       # total timeline in samples (fs_target domain)
     min_interference_volume: float,
     max_interference_volume: float,
     num_speakers: int | None = None,  # default: len(room.sources)
-    min_wavsource_duration: int | None = None,  # None -> equals scenario_duration
+    min_wavsource_duration_s: float | None = None,  # None -> equals scenario_duration
     rng: np.random.Generator | None = None,
 ) -> Optional[Scenario]:
     """
@@ -58,6 +47,9 @@ def gen_one_scenario(
       - Each sourceloc has ≤ 1 wavsource (so no per-sourceloc overlap by construction).
       - Returns None if constraints cannot be satisfied.
     """
+    scenario_duration = scenario_duration_s * fs_target
+    if min_wavsource_duration_s is not None:
+        min_wavsource_duration = min_wavsource_duration_s * fs_target
     # Basic checks / defaults
     if scenario_duration <= 0:
         log.error(f"gen_one_scenario: Scenario duration non-positive: {scenario_duration=}")
@@ -118,7 +110,7 @@ def gen_one_scenario(
             # If we can’t read header, fail scenario generation cleanly
             return None
 
-        L, M = _resampling_values(fs_from, fs_target)
+        L, M = resampling_values(fs_from, fs_target)
 
         # Duration/Delay: since we allow at most one per sourceloc, no overlap concerns.
         # If min_wavsource_duration == scenario_duration -> delay=0, duration=scenario_duration
@@ -180,11 +172,11 @@ def gen_scenarios(room_dir: Path, outpath: Path, wav_dir: Path, scengen_cfg: con
             scen = gen_one_scenario(
                 room, wav_files,
                 fs_target=fs,
-                scenario_duration=scengen_cfg.scenario_duration,
+                scenario_duration_s=scengen_cfg.scenario_duration_s,
                 min_interference_volume=scengen_cfg.min_interference_volume,
                 max_interference_volume=scengen_cfg.max_interference_volume,
                 num_speakers=scengen_cfg.num_speakers,
-                min_wavsource_duration=scengen_cfg.effective_min_wavsource_duration,
+                min_wavsource_duration_s=scengen_cfg.effective_min_wavsource_duration_s,
             )
             if scen:
                 scen_hash = make_pydantic_cache_key(scen)

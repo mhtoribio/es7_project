@@ -57,6 +57,12 @@ class PathsCfg(BaseModel):
     @property
     def rir_cache_dir(self) -> Path: return self.output_dir / "rir_cache"
 
+    @property
+    def ml_data_dir(self) -> Path: return self.output_dir / "ml_data"
+
+    @property
+    def models_dir(self) -> Path: return self.output_dir / "trained_models"
+
 class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
@@ -177,7 +183,7 @@ class RoomGenCfg(BaseModel):
 
 class ScenarioGenCfg(BaseModel):
     # required
-    scenario_duration: Annotated[int,  Field(gt=0)] = 160000
+    scenario_duration_s: Annotated[float,  Field(gt=0)] = 5.0
     min_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
     max_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
     scenarios_per_room: Annotated[int, Field(gt=0)] = 5
@@ -185,21 +191,28 @@ class ScenarioGenCfg(BaseModel):
     # optional
     num_speakers: Annotated[int | None, Field(gt=0)] = None
     # None => treat as scenario_duration at *use* time
-    min_wavsource_duration: Annotated[int | None, Field(gt=0)] = None
+    min_wavsource_duration_s: Annotated[float | None, Field(gt=0)] = None
 
     @model_validator(mode="after")
     def _cross_checks(self):
         if self.min_interference_volume > self.max_interference_volume:
             raise ValueError("min_speaker_volume must be <= max_speaker_volume")
-        if self.min_wavsource_duration is not None:
-            if self.min_wavsource_duration > self.scenario_duration:
+        if self.min_wavsource_duration_s is not None:
+            if self.min_wavsource_duration_s > self.scenario_duration_s:
                 raise ValueError("min_wavsource_duration cannot exceed scenario_duration")
         return self
 
     # Convenience: compute the effective value without mutating the stored one
     @property
-    def effective_min_wavsource_duration(self) -> int:
-        return self.scenario_duration if self.min_wavsource_duration is None else self.min_wavsource_duration
+    def effective_min_wavsource_duration_s(self) -> float:
+        return self.scenario_duration_s if self.min_wavsource_duration_s is None else self.min_wavsource_duration_s
+
+class LearningCfg(BaseModel):
+    epochs: int = 50
+    hidden_channels: int = 64
+    learning_rate: float = 1e-3
+    batch_size: int = 8
+    num_workers: int = 4
 
 class Config(BaseSettings):
     """
@@ -230,6 +243,35 @@ class Config(BaseSettings):
     scenariogen: ScenarioGenCfg = Field(default_factory=ScenarioGenCfg)
     debug: bool = Field(default=False)
     clean_zip_files: int = Field(default=1)
+    deeplearning: LearningCfg = Field(default_factory=LearningCfg)
+
+    # ---- Derived property: L_max for STFT frames ----
+    @property
+    def L_max(self) -> int:
+        """
+        Maximum number of STFT frames for training, derived from:
+          - scenario_duration_s (clean length)
+          - datagen_samplerate
+          - STFT window_len & hop_size
+          - an assumed max RIR length (here: dsp.early_ms)
+        """
+
+        fs = self.dsp.datagen_samplerate
+        win = self.dsp.window_len
+        hop = self.dsp.hop_size
+
+        # Clean duration in samples
+        N_clean = int(round(self.scenariogen.scenario_duration_s * fs))
+
+        max_rir_s = 1.2 # hardcoded max RIR length
+        N_rir = int(round(max_rir_s * fs))
+
+        N_td = N_clean + N_rir  # total time-domain length of mic signals
+
+        if N_td <= win:
+            return 1
+
+        return 1 + (N_td - win) // hop
 
 
 # -----------------------------------------------------------------------------
@@ -357,11 +399,17 @@ def as_dict(include_computed: bool = True) -> dict[str, Any]:
         d["paths"] |= {
             "scenario_dir": str(p.scenario_dir),
             "distant_dir": str(p.distant_dir),
+            "room_dir": str(p.room_dir),
             "enhanced_dir": str(p.enhanced_dir),
             "metrics_dir": str(p.metrics_dir),
             "stats_dir": str(p.stats_dir),
             "debug_dir": str(p.debug_dir),
+            "rir_cache_dir": str(p.rir_cache_dir),
+            "ml_data_dir": str(p.ml_data_dir),
+            "models_dir": str(p.models_dir),
         }
+        d.setdefault("deeplearning", {})
+        d["deeplearning"]["L_max"] = cfg.L_max
     return d
 
 

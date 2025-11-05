@@ -3,7 +3,7 @@ import numpy as np
 import unittest
 
 from .common import TEST_OUTPUT_DIR
-from seadge.utils import stft
+from seadge.utils import dsp
 from seadge.utils import visualization
 from seadge import config
 
@@ -13,11 +13,12 @@ class StftVisualizationTestSuite(unittest.TestCase):
     def test_simple_stft(self):
         # Load default config
         config.load_default()
+        cfg = config.get()
 
         # Create random signal, transform and transform back
         x = np.random.rand(16384)
-        S = stft.stft(x)
-        x_hat = stft.istft(S)
+        S = dsp.stft(x, cfg.dsp.datagen_samplerate)
+        x_hat = dsp.istft(S, cfg.dsp.datagen_samplerate)
         mse = np.mean((x_hat[:len(x)] - x)**2)
 
         assert mse < 1e-20
@@ -29,7 +30,7 @@ class StftVisualizationTestSuite(unittest.TestCase):
         cfg = config.get()
         t = np.arange(0, 16384, 1)
         x = np.sin(2000*2*np.pi*t/cfg.dsp.datagen_samplerate)
-        S = stft.stft(x)
+        S = dsp.stft(x, cfg.dsp.datagen_samplerate)
 
         visualization.spectrogram(S, TEST_OUTPUT_DIR/"spectrogram_test.png", title="Test Spectrogram")
 

@@ -36,7 +36,7 @@ mic_y = 0.05
 mic_z = 1.2
 
 [scenariogen]
-scenario_duration = 480000
+scenario_duration_s = 10.0
 min_interference_volume = 0.1
 max_interference_volume = 0.5
 scenarios_per_room = 5
