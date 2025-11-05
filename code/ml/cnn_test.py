@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from pathlib import Path
 
+###save_scenario_features placed in the script creating the scenario?
 def save_scenario_features(
     out_dir: Path,
     scenario_id: str,
@@ -19,6 +20,7 @@ def save_scenario_features(
     np.savez_compressed(out_path, Y=Y.astype(np.complex64),
                         S_early=S_early.astype(np.complex64))
 
+#####complex split to re and im 
 def complex_to_ri(x: torch.Tensor) -> torch.Tensor:
     """
     x: complex tensor of shape (...,)
@@ -26,7 +28,7 @@ def complex_to_ri(x: torch.Tensor) -> torch.Tensor:
     """
     return torch.stack((x.real, x.imag), dim=-1)
 
-
+##### prepare psd dataset?
 class PSDDataset(Dataset):
     def __init__(
         self,
@@ -36,7 +38,7 @@ class PSDDataset(Dataset):
         dtype: torch.dtype = torch.float32,
     ):
         """
-        root: directory with scenario .npz files
+        root: directory with scenario .npz files 
         N_max: maximum number of speakers in the model (pad as needed)
         """
         self.root = Path(root)
@@ -103,6 +105,8 @@ class PSDDataset(Dataset):
         return Y_in, Phi, speaker_mask
 
 
+#####simple psd with re and im as input
+#### no maxpool or linear layres because we do not want to reduce time or freq solution
 class SimplePSDNet(nn.Module):
     def __init__(self, C_in: int, N_max: int, hidden: int = 64):
         """
@@ -128,7 +132,7 @@ class SimplePSDNet(nn.Module):
         return self.net(x)
 
 
-
+###training function for model
 def train_psd_net(
     data_root: Path,
     *,
