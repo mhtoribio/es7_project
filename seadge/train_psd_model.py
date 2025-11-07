@@ -146,5 +146,5 @@ def main():
     with torch.no_grad():
         y_pred = model(x_sample)
 
-    spectrogram(y_pred.squeeze(0).numpy(), cfg.paths.debug_dir / "cnn" / "psd_pred.png", title="PSD pred")
-    spectrogram(y_sample.squeeze(0).numpy(), cfg.paths.debug_dir / "cnn" / "psd_truth.png", title="PSD ground truth")
+    spectrogram(y_pred.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_pred.png", title="PSD pred")
+    spectrogram(y_sample.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_truth.png", title="PSD ground truth")
