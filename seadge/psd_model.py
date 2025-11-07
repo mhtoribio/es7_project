@@ -94,7 +94,7 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int) -> tuple[torch.FloatTensor,
     # Compute labels
     X_list = []
     Y_list = []
-    for npz_file in npz_files:
+    for npz_file in tqdm(npz_files, desc="loading npz files"):
         distant, early = load_features_and_psd(npz_file, L_max)
 
         # compute features
