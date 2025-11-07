@@ -74,8 +74,8 @@ class DspCfg(BaseModel):
 
     # spectogram figure settings
     # TODO make this fit with both samplerates
-    x_tick_prop : Tuple[float, float, float] = (0, hop_size/datagen_samplerate, datagen_samplerate/hop_size);
-    y_tick_prop : Tuple[float, float, float] = (0, datagen_samplerate/(2000*hop_size), hop_size/2);
+    x_tick_prop : Tuple[float, float, float] = (0, hop_size/enhancement_samplerate, 10*enhancement_samplerate/hop_size);
+    y_tick_prop : Tuple[float, float, float] = (0, enhancement_samplerate/(2000*hop_size), hop_size/2);
     c_range     : Tuple[int, int]            = (-55, 5);
 
     # RIR convolution settings
@@ -257,7 +257,7 @@ class Config(BaseSettings):
           - an assumed max RIR length (here: dsp.early_ms)
         """
 
-        fs = self.dsp.datagen_samplerate
+        fs = self.dsp.enhancement_samplerate
         win = self.dsp.window_len
         hop = self.dsp.hop_size
 

@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import sys
 
-from seadge import psd_model
+from seadge import train_psd_model
 from seadge.commandline import common
 from seadge.utils.log import log
 
@@ -14,4 +14,4 @@ p = common.parser_commands.add_parser(
 )
 
 def main(args):
-    psd_model.main()
+    train_psd_model.main()
