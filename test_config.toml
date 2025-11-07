@@ -17,10 +17,10 @@ min_dimensions_m = [3.0, 4.0, 2.0]
 max_dimensions_m = [8.0, 10.0, 4.0]
 max_image_order = 10
 
-num_generated_rooms = 3
+num_generated_rooms = 5
 
-min_num_source_locations = 2
-max_num_source_locations = 5
+min_num_source_locations = 1
+max_num_source_locations = 1
 # Minimum distances from sources to wall and mic
 # Be careful choosing these values since they (along with room dimensions) also determine "spread" of sources in the room
 min_source_distance_to_wall_m = 1.0

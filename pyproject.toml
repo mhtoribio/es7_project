@@ -23,6 +23,7 @@ dependencies = [
   "tqdm>=4.67",
   "requests>=2.32",
   "torch>=2.9",
+  "scikit-learn>=1.6",
 ]
 
 # optional URL field based on your setup.py

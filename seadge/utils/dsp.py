@@ -77,3 +77,6 @@ def resampling_values(fs_from: int, fs_to: int) -> tuple[int, int]:
         raise ValueError("Sample rates must be positive integers")
     g = math.gcd(fs_from, fs_to)
     return (fs_to // g, fs_from // g)
+
+def complex_to_mag_phase(x):
+    return np.abs(x), np.angle(x)
