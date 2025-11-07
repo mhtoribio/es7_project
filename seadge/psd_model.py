@@ -180,6 +180,8 @@ def train_psd_model(
     # Testing phase
     model.eval()
     with torch.no_grad():
+        x_test = x_test.to(device)
+        y_test = y_test.to(device)
         test_pred = model(x_test)
         test_loss = criterion(test_pred, y_test).item()
 
@@ -235,6 +237,13 @@ def main():
     plt.title("PSD Estimator Training Loss")
     plt.grid(True)
     plt.legend()
-    outfigpath = cfg.paths.debug_dir / "mlp" / "train_loss.png"
+    outfigpath = cfg.paths.debug_dir / "cnn" / "train_loss.png"
+    outfigpath.parent.mkdir(parents=True, exist_ok=True)
     log.debug(f"Writing training loss figure to {outfigpath}")
     plt.savefig(outfigpath)
+
+    # Save model
+    outpath = cfg.paths.models_dir / "model.pt"
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    log.debug(f"Writing model to {outpath}")
+    torch.save(model.state_dict(), outpath)
