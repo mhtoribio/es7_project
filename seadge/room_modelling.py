@@ -2,6 +2,10 @@ import numpy as np
 import pyroomacoustics as pra
 from typing import Iterator, Tuple, Any
 from tqdm import tqdm
+from functools import partial
+from multiprocessing import Pool
+from pathlib import Path
+import os
 
 from seadge import config
 from seadge.utils.visualization import plot_rir
@@ -156,9 +160,24 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
                 early_ms=early_ms,
             )
 
+def _compute_rirs_for_room(room_file: Path, debug: bool):
+    room = config.load_room(room_file)
+    get_all_rirs(room, save_npy=True, save_rir_plots=debug)
+
 def main():
     cfg = config.get()
-    room_files = files_in_path_recursive(cfg.paths.room_dir, "*.room.json")
-    for room_file in tqdm(room_files, desc="Computing RIRs for rooms"):
-        room = config.load_room(room_file)
-        get_all_rirs(room, save_npy=True, save_rir_plots=cfg.debug)
+    room_files = list(files_in_path_recursive(cfg.paths.room_dir, "*.room.json"))
+
+    slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+    num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
+    log.info(f"Computing RIRs for {len(room_files)} rooms with {num_processes} workers")
+
+    worker = partial(_compute_rirs_for_room, debug=cfg.debug)
+
+    with Pool(processes=num_processes) as pool:
+        for _ in tqdm(
+            pool.imap_unordered(worker, room_files),
+            total=len(room_files),
+            desc="Computing RIRs for rooms",
+        ):
+            pass

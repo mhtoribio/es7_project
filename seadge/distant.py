@@ -3,6 +3,9 @@ from scipy.signal import resample_poly
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
+from functools import partial
+from multiprocessing import Pool
+import os
 
 from seadge import config
 from seadge.utils.distant_sim import animate_rir_time, animate_freqresp, sim_distant_src
@@ -166,40 +169,80 @@ def simulate_one_scenario(
 
     return scen_hash, y_gen
 
+def _simulate_one_file(
+    scenfile: Path,
+    room_dir: Path,
+    debug_dir: Path | None,
+    rir_cache_dir: Path,
+    ml_data_dir: Path,
+    fs_datagen: int,
+    fs_enhancement: int,
+    xfade_ms: float,
+    convmethod: str,
+    normalize: str | None,
+    early_ms: float,
+    early_taper_ms: float,
+    outpath: Path,
+):
+    scen = load_scenario(scenfile)
+    scen_hash, x = simulate_one_scenario(
+        scen=scen,
+        room_dir=room_dir,
+        debug_dir=debug_dir,
+        rir_cache_dir=rir_cache_dir,
+        ml_data_dir=ml_data_dir,
+        fs_datagen=fs_datagen,
+        fs_enhancement=fs_enhancement,
+        xfade_ms=xfade_ms,
+        convmethod=convmethod,
+        normalize=normalize,
+        early_ms=early_ms,
+        early_taper_ms=early_taper_ms,
+    )
+    write_wav(outpath / f"{scen_hash}.wav", x, fs=fs_datagen)
+
 def simulate_scenarios(
-        scenario_dir: Path,
-        outpath: Path,
-        rir_cache_dir: Path,
-        room_dir: Path,
-        debug_dir: Path | None,
-        ml_data_dir: Path,
-        fs_datagen: int,
-        fs_enhancement: int,
-        xfade_ms: float,
-        convmethod: str,
-        normalize: str | None,
-        early_ms: float,
-        early_taper_ms: float,
-        ):
-    scenario_files = files_in_path_recursive(scenario_dir, "*.scenario.json")
-    log.info(f"Simulating {len(scenario_files)} scenarios")
-    for scenfile in tqdm(scenario_files, desc="Simulating scenarios"):
-        scen = load_scenario(scenfile)
-        scen_hash, x = simulate_one_scenario(
-            scen=scen,
-            room_dir=room_dir,
-            debug_dir=debug_dir,
-            rir_cache_dir=rir_cache_dir,
-            ml_data_dir=ml_data_dir,
-            fs_datagen=fs_datagen,
-            fs_enhancement=fs_enhancement,
-            xfade_ms=xfade_ms,
-            convmethod=convmethod,
-            normalize=normalize,
-            early_ms=early_ms,
-            early_taper_ms=early_taper_ms,
-        )
-        write_wav(outpath / f"{scen_hash}.wav", x, fs=fs_datagen)
+    scenario_dir: Path,
+    outpath: Path,
+    rir_cache_dir: Path,
+    room_dir: Path,
+    debug_dir: Path | None,
+    ml_data_dir: Path,
+    fs_datagen: int,
+    fs_enhancement: int,
+    xfade_ms: float,
+    convmethod: str,
+    normalize: str | None,
+    early_ms: float,
+    early_taper_ms: float,
+):
+    slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+    num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
+    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json"))
+    log.info(f"Simulating {len(scenario_files)} scenarios with {num_processes} workers")
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    worker_fn = partial(
+        _simulate_one_file,
+        room_dir=room_dir,
+        debug_dir=debug_dir,
+        rir_cache_dir=rir_cache_dir,
+        ml_data_dir=ml_data_dir,
+        fs_datagen=fs_datagen,
+        fs_enhancement=fs_enhancement,
+        xfade_ms=xfade_ms,
+        convmethod=convmethod,
+        normalize=normalize,
+        early_ms=early_ms,
+        early_taper_ms=early_taper_ms,
+        outpath=outpath,
+    )
+
+    with Pool(processes=num_processes) as pool:
+        with tqdm(total=len(scenario_files), desc="Simulating scenarios") as pbar:
+            # imap_unordered yields one result as each worker finishes
+            for _ in pool.imap_unordered(worker_fn, scenario_files):
+                pbar.update()
 
 def main():
     cfg = config.get()
