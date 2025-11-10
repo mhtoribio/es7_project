@@ -3,9 +3,10 @@ import json, hashlib, time
 from pathlib import Path
 import numpy as np
 from functools import lru_cache
-
+import os
+import time
+import fcntl
 import json, hashlib
-from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel
 
@@ -105,38 +106,81 @@ def save_rir(cache_root: Path, key: str, rir: np.ndarray, meta: dict) -> Path:
     (d / "meta.json").write_text(json.dumps(meta, indent=2))
     return d / "rir.npy"
 
-def update_manifest(cache_root: Path, key: str, rir_path: Path, *, src_idx: int, pose_idx: int,
-                    start_sample: int, loc, rir: np.ndarray, fs: int) -> None:
+def update_manifest(
+    cache_root: Path,
+    key: str,
+    rir_path: Path,
+    *,
+    src_idx: int,
+    pose_idx: int,
+    start_sample: int,
+    loc,
+    rir: np.ndarray,
+    fs: int,
+) -> None:
+    """
+    Safe, concurrent update of cache_root/manifest.json.
+
+    Uses:
+      - .manifest.lock as an advisory file lock (fcntl.flock, exclusive)
+      - atomic write via temp file + rename
+    """
+    cache_root = Path(cache_root)
+    cache_root.mkdir(parents=True, exist_ok=True)
+
     mpath = cache_root / "manifest.json"
-    if mpath.is_file():
-        manifest = json.loads(mpath.read_text())
-    else:
-        manifest = {"version": 1, "entries": []}
-    entry = {
-        "key": key,
-        "file": str(rir_path.relative_to(cache_root)),
-        "shape": list(rir.shape),
-        "dtype": str(rir.dtype),
-        "src_index": int(src_idx),
-        "pose_index": int(pose_idx),
-        "start_sample": int(start_sample),
-        "pose": {
-            "loc": list(map(float, loc.location_m)),
-            "pattern": loc.pattern,
-            "az_deg": float(loc.azimuth_deg),
-            "col_deg": float(loc.colatitude_deg),
-        },
-        "fs": int(fs),
-        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    # upsert by key
-    entries = manifest["entries"]
-    for i, e in enumerate(entries):
-        if e["key"] == key:
-            entries[i] = entry
-            break
-    else:
-        entries.append(entry)
-    tmp = mpath.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(manifest, indent=2))
-    tmp.replace(mpath)
+    lock_path = cache_root / ".manifest.lock"
+
+    # Open a dedicated lock file and take an exclusive lock
+    with open(lock_path, "w") as lockf:
+        fcntl.flock(lockf, fcntl.LOCK_EX)
+        try:
+            # --- BEGIN critical section: read → modify → write manifest ---
+
+            if mpath.is_file():
+                try:
+                    manifest = json.loads(mpath.read_text())
+                except json.JSONDecodeError:
+                    # Corrupt / partial file -> start fresh (or log)
+                    manifest = {"version": 1, "entries": []}
+            else:
+                manifest = {"version": 1, "entries": []}
+
+            entry = {
+                "key": key,
+                "file": str(rir_path.relative_to(cache_root)),
+                "shape": list(rir.shape),
+                "dtype": str(rir.dtype),
+                "src_index": int(src_idx),
+                "pose_index": int(pose_idx),
+                "start_sample": int(start_sample),
+                "pose": {
+                    "loc": list(map(float, loc.location_m)),
+                    "pattern": loc.pattern,
+                    "az_deg": float(loc.azimuth_deg),
+                    "col_deg": float(loc.colatitude_deg),
+                },
+                "fs": int(fs),
+                "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+
+            # upsert by key
+            entries = manifest["entries"]
+            for i, e in enumerate(entries):
+                if e["key"] == key:
+                    entries[i] = entry
+                    break
+            else:
+                entries.append(entry)
+
+            tmp = mpath.with_suffix(".json.tmp")
+            # Write to temp file, fsync, then rename (atomic)
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            tmp.replace(mpath)
+
+            # --- END critical section ---
+        finally:
+            fcntl.flock(lockf, fcntl.LOCK_UN)

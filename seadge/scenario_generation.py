@@ -6,6 +6,9 @@ import hashlib
 import math
 import numpy as np
 from tqdm import tqdm
+from functools import partial
+from multiprocessing import Pool
+import os
 
 from seadge.utils.scenario import Scenario, WavSource
 from seadge.utils.files import files_in_path_recursive
@@ -162,29 +165,81 @@ def gen_one_scenario(
 
     return scen
 
-def gen_scenarios(room_dir: Path, outpath: Path, wav_dir: Path, scengen_cfg: config.ScenarioGenCfg, fs: int):
-    room_files = files_in_path_recursive(room_dir, "*.room.json")
-    wav_files = files_in_path_recursive(wav_dir, "*.wav")
-    for room_path in tqdm(room_files, desc="Generating scenarios for rooms"):
-        room = config.load_room(room_path)
-        log.info(f"Generating {scengen_cfg.scenarios_per_room} scenarios for room {make_pydantic_cache_key(room)}")
-        for i in range(scengen_cfg.scenarios_per_room):
-            log.debug(f"Generating scenario {i} for room {make_pydantic_cache_key(room)}")
-            scen = gen_one_scenario(
-                room, wav_files,
-                fs_target=fs,
-                scenario_duration_s=scengen_cfg.scenario_duration_s,
-                min_interference_volume=scengen_cfg.min_interference_volume,
-                max_interference_volume=scengen_cfg.max_interference_volume,
-                num_speakers=scengen_cfg.num_speakers,
-                min_wavsource_duration_s=scengen_cfg.effective_min_wavsource_duration_s,
-            )
-            if scen:
-                scen_hash = make_pydantic_cache_key(scen)
-                config.save_json(scen, outpath / f"{scen_hash}.scenario.json")
-                log.debug(f"Successfully generated scenario {scen_hash}")
-            else:
-                log.error(f"Failed generating scenario")
+def _gen_scenarios_for_room(
+    room_path: Path,
+    wav_files: list[Path],
+    scengen_cfg,
+    fs: int,
+    outpath: Path,
+) -> int:
+    """Worker: generate all scenarios for a single room."""
+    room = config.load_room(room_path)
+    room_key = make_pydantic_cache_key(room)
+
+    log.debug(
+        f"Generating {scengen_cfg.scenarios_per_room} scenarios "
+        f"for room {room_key}"
+    )
+
+    n_ok = 0
+    for i in range(scengen_cfg.scenarios_per_room):
+        log.debug(f"Generating scenario {i} for room {room_key}")
+        scen = gen_one_scenario(
+            room,
+            wav_files,
+            fs_target=fs,
+            scenario_duration_s=scengen_cfg.scenario_duration_s,
+            min_interference_volume=scengen_cfg.min_interference_volume,
+            max_interference_volume=scengen_cfg.max_interference_volume,
+            num_speakers=scengen_cfg.num_speakers,
+            min_wavsource_duration_s=scengen_cfg.effective_min_wavsource_duration_s,
+        )
+        if scen:
+            scen_hash = make_pydantic_cache_key(scen)
+            config.save_json(scen, outpath / f"{scen_hash}.scenario.json")
+            log.debug(f"Successfully generated scenario {scen_hash}")
+            n_ok += 1
+        else:
+            log.error("Failed generating scenario")
+
+    return n_ok  # main process doesn’t strictly need this, but nice to have
+
+
+def gen_scenarios(
+    room_dir: Path,
+    outpath: Path,
+    wav_dir: Path,
+    scengen_cfg: config.ScenarioGenCfg,
+    fs: int,
+):
+    room_files = list(files_in_path_recursive(room_dir, "*.room.json"))
+    wav_files = list(files_in_path_recursive(wav_dir, "*.wav"))
+    outpath.mkdir(parents=True, exist_ok=True)
+
+    if not room_files:
+        log.warning("No room files found, nothing to generate")
+        return
+
+    slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
+    num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
+    log.info(f"Generating scenarios for {len(room_files)} rooms using {num_processes} workers")
+
+    worker = partial(
+        _gen_scenarios_for_room,
+        wav_files=wav_files,
+        scengen_cfg=scengen_cfg,
+        fs=fs,
+        outpath=outpath,
+    )
+
+    with Pool(processes=num_processes) as pool:
+        # tqdm lives in the main process; each completed room updates it by 1
+        for _ in tqdm(
+            pool.imap_unordered(worker, room_files),
+            total=len(room_files),
+            desc="Generating scenarios for rooms",
+        ):
+            pass
 
 def main():
     cfg = config.get()
