@@ -116,21 +116,17 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     del results
 
     # Convert lists to numpy
-    log.debug(f"Allocating destination arrays. Previous step took {time.time()-t} s")
+    log.debug(f"Converting lists to numpy. Previous step took {time.time()-t} s")
     t = time.time()
     n = len(X_list)
     X_shape = (n,) + X_list[0].shape
     Y_shape = (n,) + Y_list[0].shape
     X_np = np.empty(X_shape, dtype=np.float32)
     Y_np = np.empty(Y_shape, dtype=np.float32)
-    log.debug(f"Converting X_list to X_np. Previous step took {time.time()-t} s")
-    t = time.time()
-    for i, arr in enumerate(X_list):
+    for i, arr in tqdm(enumerate(X_list), desc="Converting X_list to X_np"):
         X_np[i] = arr
     del X_list
-    log.debug(f"Converting Y_list to Y_np. Previous step took {time.time()-t} s")
-    t = time.time()
-    for i, arr in enumerate(Y_list):
+    for i, arr in tqdm(enumerate(Y_list), desc="Converting Y_list to Y_np"):
         Y_np[i] = arr
     del Y_list
 
