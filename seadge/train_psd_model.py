@@ -9,9 +9,9 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from seadge.utils.log import log
+from seadge.utils.psd_data_loader import load_tensors_cache
 from seadge.utils.visualization import spectrogram
 from seadge.models.psd_cnn import SimplePSDCNN
-from seadge.utils.psd_data_loader import load_tensors_from_dir
 from seadge import config
 
 def train_psd_model(
@@ -83,7 +83,7 @@ def main():
     log.info("Training PSD model")
 
     # Load tensors
-    x_tensor, y_tensor = load_tensors_from_dir(cfg.paths.ml_data_dir, cfg.L_max, cfg.deeplearning.num_max_npz_files)
+    x_tensor, y_tensor, _ = load_tensors_cache(cfg.paths.ml_data_dir)
 
     # Define input/output sizes
     num_freqbins = y_tensor.shape[1]

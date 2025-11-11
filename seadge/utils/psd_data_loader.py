@@ -81,10 +81,10 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
 
-    return features, psd
+    return features.astype(np.float32), psd.astype(np.float32)
 
 
-def load_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
+def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
     npz_files = list(files_in_path_recursive(npz_dir, "*.npz"))
     if num_max_npz > len(npz_files):
         log.warning(f"Desired number of npz files (scenarios) too large ({num_max_npz}). Only {len(npz_files)} found.")
@@ -114,11 +114,18 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[
     t = time.time()
     X_list, Y_list = zip(*results)  # tuples of np.ndarrays
 
-    # Stack instead of asarray (clearer intent) + convert dtype once
-    log.debug(f"Stacking lists to numpy arrays. Previous step took {time.time()-t} s")
+    # Convert lists to numpy
+    log.debug(f"Converting lists to numpy arrays. Previous step took {time.time()-t} s")
     t = time.time()
-    X_np = np.stack(X_list).astype(np.float32, copy=False)
-    Y_np = np.stack(Y_list).astype(np.float32, copy=False)
+    n = len(X_list)
+    X_shape = (n,) + X_list[0].shape
+    Y_shape = (n,) + Y_list[0].shape
+    X_np = np.empty(X_shape, dtype=np.float32)
+    Y_np = np.empty(Y_shape, dtype=np.float32)
+    for i, arr in enumerate(X_list):
+        X_np[i] = arr
+    for i, arr in enumerate(Y_list):
+        Y_np[i] = arr
 
     # torch.from_numpy avoids an extra copy
     log.debug(f"Converting numpy to torch. Previous step took {time.time()-t} s")
@@ -136,3 +143,26 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[
     )
 
     return X, Y
+
+def load_tensors_cache(npz_dir: Path) -> tuple[torch.Tensor, torch.Tensor, int]:
+    cache_path = npz_dir / "tensors.npz"
+    payload = torch.load(cache_path, map_location="cpu")
+    X = payload["X"]
+    Y = payload["Y"]
+    L_max = payload["L_max"]
+    return X, Y, L_max
+
+def save_tensors_cache(npz_dir: Path, X: torch.Tensor, Y: torch.Tensor, *, L_max: int):
+    cache_path = npz_dir / "tensors.npz"
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "X": X.cpu(),   # ensure on CPU
+        "Y": Y.cpu(),
+        "L_max": int(L_max),
+        "dtype": str(X.dtype),
+        "shape_X": tuple(X.shape),
+        "shape_Y": tuple(Y.shape),
+    }
+    torch.save(payload, cache_path)
