@@ -115,15 +115,19 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     X_list, Y_list = zip(*results)  # tuples of np.ndarrays
 
     # Convert lists to numpy
-    log.debug(f"Converting lists to numpy arrays. Previous step took {time.time()-t} s")
+    log.debug(f"Allocating destination arrays. Previous step took {time.time()-t} s")
     t = time.time()
     n = len(X_list)
     X_shape = (n,) + X_list[0].shape
     Y_shape = (n,) + Y_list[0].shape
     X_np = np.empty(X_shape, dtype=np.float32)
     Y_np = np.empty(Y_shape, dtype=np.float32)
+    log.debug(f"Converting X_list to X_np. Previous step took {time.time()-t} s")
+    t = time.time()
     for i, arr in enumerate(X_list):
         X_np[i] = arr
+    log.debug(f"Converting Y_list to Y_np. Previous step took {time.time()-t} s")
+    t = time.time()
     for i, arr in enumerate(Y_list):
         Y_np[i] = arr
 
