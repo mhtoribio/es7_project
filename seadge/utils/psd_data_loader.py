@@ -86,7 +86,10 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
 
 def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
     npz_files = list(files_in_path_recursive(npz_dir, "*.npz"))
-    npz_files.remove(npz_dir / "tensors.npz")
+    try:
+        npz_files.remove(npz_dir / "tensors.npz")
+    except ValueError:
+        pass
     if num_max_npz > len(npz_files):
         log.warning(f"Desired number of npz files (scenarios) too large ({num_max_npz}). Only {len(npz_files)} found.")
     if num_max_npz == 0:
