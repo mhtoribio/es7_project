@@ -83,7 +83,7 @@ def main():
     log.info("Training PSD model")
 
     # Load tensors
-    x_tensor, y_tensor = load_tensors_from_dir(cfg.paths.ml_data_dir, cfg.L_max)
+    x_tensor, y_tensor = load_tensors_from_dir(cfg.paths.ml_data_dir, cfg.L_max, cfg.deeplearning.num_max_npz_files)
 
     # Define input/output sizes
     num_freqbins = y_tensor.shape[1]

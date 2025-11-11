@@ -84,9 +84,15 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     return features, psd
 
 
-def load_tensors_from_dir(npz_dir: Path, L_max: int) -> tuple[torch.Tensor, torch.Tensor]:
+def load_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
     npz_files = list(files_in_path_recursive(npz_dir, "*.npz"))
-    log.info(f"Creating tensors from {len(npz_files)} npz files")
+    if num_max_npz > len(npz_files):
+        log.warning(f"Desired number of npz files (scenarios) too large ({num_max_npz}). Only {len(npz_files)} found.")
+    if num_max_npz == 0:
+        log.info(f"No desired number of npz files set. Using all available files on disk.")
+        num_max_npz = len(npz_files)
+    num_npz = min(len(npz_files), num_max_npz)
+    log.info(f"Creating tensors from {num_npz} npz files")
 
     if not npz_files:
         raise RuntimeError(f"No npz files found in {npz_dir}")
@@ -98,7 +104,7 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int) -> tuple[torch.Tensor, torc
     # process_map gives you tqdm for free
     results: List[Tuple[np.ndarray, np.ndarray]] = process_map(
         _load_one_npz_for_training,
-        [(f, L_max) for f in npz_files],
+        [(f, L_max) for f in npz_files[:num_npz]],
         max_workers=n_workers,
         chunksize=1,
         desc="loading npz files",
