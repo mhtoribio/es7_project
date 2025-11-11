@@ -113,6 +113,7 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     log.debug(f"Extracting X_list and Y_list. Previous step took {time.time()-t} s")
     t = time.time()
     X_list, Y_list = zip(*results)  # tuples of np.ndarrays
+    del results
 
     # Convert lists to numpy
     log.debug(f"Allocating destination arrays. Previous step took {time.time()-t} s")
@@ -126,10 +127,12 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     t = time.time()
     for i, arr in enumerate(X_list):
         X_np[i] = arr
+    del X_list
     log.debug(f"Converting Y_list to Y_np. Previous step took {time.time()-t} s")
     t = time.time()
     for i, arr in enumerate(Y_list):
         Y_np[i] = arr
+    del Y_list
 
     # torch.from_numpy avoids an extra copy
     log.debug(f"Converting numpy to torch. Previous step took {time.time()-t} s")
