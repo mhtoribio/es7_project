@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 import logging
+import time
 
 from seadge.utils.log import log
 from seadge.utils.files import files_in_path_recursive
@@ -93,6 +94,7 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int) -> tuple[torch.Tensor, torc
     n_workers = _get_n_workers()
     log.info(f"Loading npz files with {n_workers} workers")
 
+    t = time.time()
     # process_map gives you tqdm for free
     results: List[Tuple[np.ndarray, np.ndarray]] = process_map(
         _load_one_npz_for_training,
@@ -102,13 +104,19 @@ def load_tensors_from_dir(npz_dir: Path, L_max: int) -> tuple[torch.Tensor, torc
         desc="loading npz files",
     )
 
+    log.debug(f"Extracting X_list and Y_list. Previous step took {time.time()-t} s")
+    t = time.time()
     X_list, Y_list = zip(*results)  # tuples of np.ndarrays
 
     # Stack instead of asarray (clearer intent) + convert dtype once
+    log.debug(f"Stacking lists to numpy arrays. Previous step took {time.time()-t} s")
+    t = time.time()
     X_np = np.stack(X_list).astype(np.float32, copy=False)
     Y_np = np.stack(Y_list).astype(np.float32, copy=False)
 
     # torch.from_numpy avoids an extra copy
+    log.debug(f"Converting numpy to torch. Previous step took {time.time()-t} s")
+    t = time.time()
     X = torch.from_numpy(X_np)
     Y = torch.from_numpy(Y_np)
 
