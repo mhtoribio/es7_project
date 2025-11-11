@@ -42,7 +42,7 @@ def train_psd_model(
     train_losses = []
     test_losses = []
 
-    pbar = tqdm(range(epochs), desc=f"Training epochs", unit="batch", leave=False)
+    pbar = tqdm(range(epochs), desc=f"Training epochs", unit="epoch", leave=False)
     for epoch in pbar:
         # Training phase
         model.train()
