@@ -86,6 +86,7 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
 
 def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
     npz_files = list(files_in_path_recursive(npz_dir, "*.npz"))
+    npz_files.remove(npz_dir / "tensors.npz")
     if num_max_npz > len(npz_files):
         log.warning(f"Desired number of npz files (scenarios) too large ({num_max_npz}). Only {len(npz_files)} found.")
     if num_max_npz == 0:
@@ -123,10 +124,10 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     Y_shape = (n,) + Y_list[0].shape
     X_np = np.empty(X_shape, dtype=np.float32)
     Y_np = np.empty(Y_shape, dtype=np.float32)
-    for i, arr in tqdm(enumerate(X_list), desc="Converting X_list to X_np"):
+    for i, arr in tqdm(enumerate(X_list), desc="Converting X_list to X_np", total=len(X_list)):
         X_np[i] = arr
     del X_list
-    for i, arr in tqdm(enumerate(Y_list), desc="Converting Y_list to Y_np"):
+    for i, arr in tqdm(enumerate(Y_list), desc="Converting Y_list to Y_np", total=len(Y_list)):
         Y_np[i] = arr
     del Y_list
 
