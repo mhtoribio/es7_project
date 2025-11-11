@@ -14,33 +14,39 @@ class SimplePSDCNN(nn.Module):
         c_out = num_freqbins
         c_hidden = c_in
 
+        frames = 21
+        if frames % 2 == 0:
+            log.error(f"Only odd frame numbers are supported for kernel size")
+        if num_mics % 2 == 0:
+            log.error(f"Only odd number of mics are supported for kernel size")
+        framepad = (frames-1)//2
+        micpad = (num_mics-1)//2
+
         self.conv1 = nn.Conv2d(
             in_channels=c_in,
             out_channels=c_hidden,
-            kernel_size=(5, num_mics),   # frames x mic
-            padding=(2, 0),
+            kernel_size=(frames, num_mics),   # frames x mic
+            padding=(framepad, micpad),
         )
-        self.conv2 = nn.Conv1d(
+        self.conv2 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
-            kernel_size=5,
-            padding=2,
+            kernel_size=(frames, num_mics),
+            padding=(framepad, micpad),
         )
-        self.conv3 = nn.Conv1d(
+        self.conv3 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_out,
-            kernel_size=1,
+            kernel_size=(frames, num_mics),
+            padding=(framepad, 0),
         )
 
     def forward(self, x_ctx):
         # x_ctx: (B, 2K, L, M)
         # output: (B, K, L, 1)
-        log.debug(f"input shape: {x_ctx.shape}")
-        x = F.relu(self.conv1(x_ctx)).squeeze(3)
-        log.debug(f"hidden 1 shape: {x.shape}")
+        x = F.relu(self.conv1(x_ctx))
         x = F.relu(self.conv2(x))
-        log.debug(f"hidden 2 shape: {x.shape}")
-        x = F.softplus(self.conv3(x))
-        log.debug(f"output shape: {x.shape}")
+        x = F.relu(self.conv3(x))
+        x = x.squeeze(3)
+        x = F.softplus(x)
         return x
-
