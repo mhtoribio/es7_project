@@ -7,6 +7,7 @@ import random
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+import os
 
 from seadge.utils.log import log
 from seadge.utils.psd_data_loader import load_tensors_cache
@@ -23,56 +24,107 @@ def train_psd_model(
         weight_decay: float,
         lr: float,
         device: str,
+        checkpoint_dir: Path,
         test_size: float = 0.2,
         ):
     """Train the PSD estimation model"""
 
     model.to(device)
 
-    # train-test data split
-    x_train, x_test, y_train, y_test = train_test_split(x_tensor, y_tensor, test_size=test_size) 
+    # train-test data split (still on CPU here)
+    x_train, x_test, y_train, y_test = train_test_split(
+        x_tensor, y_tensor, test_size=test_size
+    )
 
-    # Create dataset and batches
+    # Datasets
     train_dataset = torch.utils.data.TensorDataset(x_train, y_train)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_dataset  = torch.utils.data.TensorDataset(x_test,  y_test)
+
+    # DataLoaders
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False
+    )
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
-    criterion = nn.MSELoss() # For regression (MSELoss()), for classification (CrossEntropyLoss())
+    criterion = nn.MSELoss()  # For regression; use CrossEntropyLoss for classification
+
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    # Check if there are existing checkpoints
+    if os.listdir(checkpoint_dir):
+        # If there are existing checkpoints, load the latest one
+        latest_checkpoint = max([int(file.split('.')[0]) for file in os.listdir(checkpoint_dir)])
+        checkpoint = torch.load(os.path.join(checkpoint_dir, f'{latest_checkpoint}.pt'))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = latest_checkpoint + 1
+    else:
+        start_epoch = 0
 
     train_losses = []
-    test_losses = []
 
-    pbar = tqdm(range(epochs), desc=f"Training epochs", unit="epoch", leave=False)
+    pbar = tqdm(range(start_epoch, epochs), desc="Training epochs", unit="epoch", leave=False)
     for epoch in pbar:
+        # -----------------
         # Training phase
+        # -----------------
         model.train()
-        epoch_train_loss = 0
+        epoch_train_loss = 0.0
+        n_train_samples = 0
 
         for batch_x, batch_y in train_loader:
-            optimizer.zero_grad()
-            log.debug(f"{batch_x.shape=}, {batch_y.shape=}")
             batch_x = batch_x.to(device)
             batch_y = batch_y.to(device)
+
+            optimizer.zero_grad()
+
             pred_psd = model(batch_x)
             loss = criterion(pred_psd, batch_y)
             loss.backward()
             optimizer.step()
 
-            epoch_train_loss += loss.item() # Used for plotting
+            # accumulate loss weighted by batch size
+            bs = batch_x.size(0)
+            epoch_train_loss += loss.item() * bs
+            n_train_samples += bs
 
-        # Following is used for plotting average loss per epoch
-        avg_train_loss = epoch_train_loss / len(train_loader)
+        # average train loss per sample
+        avg_train_loss = epoch_train_loss / n_train_samples
         train_losses.append(avg_train_loss)
+
+        # Save checkpoint every epoch
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': avg_train_loss
+            }, checkpoint_dir / f'{epoch}.pt')
 
         pbar.set_postfix({"avg. train loss": f"{avg_train_loss:.6f}"})
 
+    # -----------------
     # Testing phase
+    # -----------------
     model.eval()
+    test_loss_sum = 0.0
+    n_test_samples = 0
+    log.info(f"Finished training model. avg. train loss for last epoch: {train_losses[-1]}. Starting evaluation")
+
     with torch.no_grad():
-        x_test = x_test.to(device)
-        y_test = y_test.to(device)
-        test_pred = model(x_test)
-        test_loss = criterion(test_pred, y_test).item()
+        for batch_x, batch_y in test_loader:
+            batch_x = batch_x.to(device)
+            batch_y = batch_y.to(device)
+
+            test_pred = model(batch_x)
+            loss = criterion(test_pred, batch_y)
+
+            bs = batch_x.size(0)
+            test_loss_sum += loss.item() * bs
+            n_test_samples += bs
+
+    test_loss = test_loss_sum / n_test_samples
 
     log.debug(f"Trained model with {test_loss=}")
     return train_losses, test_loss
@@ -115,6 +167,7 @@ def main():
             batch_size=cfg.deeplearning.batch_size,
             lr=cfg.deeplearning.learning_rate,
             weight_decay=cfg.deeplearning.weight_decay,
+            checkpoint_dir=cfg.paths.checkpoint_dir,
             device=device,
             )
     log.info(f"Finished training. Evaluation loss {test_loss:.6f}")

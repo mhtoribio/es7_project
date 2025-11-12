@@ -63,6 +63,9 @@ class PathsCfg(BaseModel):
     @property
     def models_dir(self) -> Path: return self.output_dir / "trained_models"
 
+    @property
+    def checkpoint_dir(self) -> Path: return self.output_dir / "checkpoints"
+
 class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
@@ -409,6 +412,7 @@ def as_dict(include_computed: bool = True) -> dict[str, Any]:
             "rir_cache_dir": str(p.rir_cache_dir),
             "ml_data_dir": str(p.ml_data_dir),
             "models_dir": str(p.models_dir),
+            "checkpoint_dir": str(p.checkpoint_dir),
         }
         d.setdefault("deeplearning", {})
         d["deeplearning"]["L_max"] = cfg.L_max
