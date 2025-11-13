@@ -65,6 +65,7 @@ def train_psd_model(
 
     train_losses = []
 
+    log.info(f"Found checkpoint. Resuming from epoch {start_epoch}")
     pbar = tqdm(range(start_epoch, epochs), desc="Training epochs", unit="epoch", leave=False)
     for epoch in pbar:
         # -----------------
