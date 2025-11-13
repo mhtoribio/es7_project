@@ -60,12 +60,13 @@ def train_psd_model(
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = latest_checkpoint + 1
+        log.info(f"Found checkpoint. Resuming from epoch {start_epoch}")
     else:
         start_epoch = 0
+        log.info(f"Found no checkpoints. Starting from epoch {start_epoch}")
 
     train_losses = []
 
-    log.info(f"Found checkpoint. Resuming from epoch {start_epoch}")
     pbar = tqdm(range(start_epoch, epochs), desc="Training epochs", unit="epoch", leave=False)
     for epoch in pbar:
         # -----------------
@@ -111,7 +112,8 @@ def train_psd_model(
     model.eval()
     test_loss_sum = 0.0
     n_test_samples = 0
-    log.info(f"Finished training model. avg. train loss for last epoch: {train_losses[-1]}. Starting evaluation")
+    if start_epoch < (epochs - 1):
+        log.info(f"Finished training model. avg. train loss for last epoch: {train_losses[-1]}. Starting evaluation")
 
     with torch.no_grad():
         for batch_x, batch_y in test_loader:
@@ -198,7 +200,10 @@ def main():
     x_sample = x_tensor[idx].to(device)            # (n_show, input_dim, ...)
     y_sample = y_tensor[idx].to(device)            # matching targets
     with torch.no_grad():
-        y_pred = model(x_sample)
+        y_pred_log = model(x_sample)
+        y_pred = torch.expm1(y_pred_log)
+        #y_true = torch.expm1(y_sample)
+        y_true = y_sample
 
-    spectrogram(y_pred.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_pred.png", title="PSD pred")
-    spectrogram(y_sample.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_truth.png", title="PSD ground truth")
+    spectrogram(y_pred.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_pred.png", title="PSD pred", scale="mag")
+    spectrogram(y_true.squeeze(0).cpu().numpy(), cfg.paths.debug_dir / "cnn" / "psd_truth.png", title="PSD ground truth", scale="mag")

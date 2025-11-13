@@ -2,8 +2,10 @@ import torch
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-import logging
 import time
+from typing import Tuple, List
+from tqdm.contrib.concurrent import process_map
+import os
 
 from seadge.utils.log import log
 from seadge.utils.files import files_in_path_recursive
@@ -38,17 +40,6 @@ def load_features_and_psd(npz_file: Path, L_max: int) -> tuple[np.ndarray, np.nd
 
     # (K, L, M), (K, L)
     return Y, S
-
-from pathlib import Path
-from typing import Tuple, List
-import numpy as np
-import torch
-from tqdm.contrib.concurrent import process_map
-import os
-import logging
-
-log = logging.getLogger(__name__)
-
 
 def _get_n_workers() -> int:
     # Prefer SLURM hints if present
@@ -139,6 +130,7 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
     t = time.time()
     X = torch.from_numpy(X_np)
     Y = torch.from_numpy(Y_np)
+    Y = torch.log1p(Y)
 
     log.info(
         "Tensor creation info: "
