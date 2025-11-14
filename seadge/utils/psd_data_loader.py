@@ -142,8 +142,8 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
 
 def load_tensors_cache(cache_dir: Path) -> tuple[torch.Tensor, torch.Tensor, int]:
     d = Path(cache_dir)
-    X_mm = np.load(d / "X.npy", mmap_mode="r")  # (N, 2K, L, M), float32
-    Y_mm = np.load(d / "Y.npy", mmap_mode="r")  # (N, K, L[,...]), float32
+    X_mm = np.load(d / "X.npy", mmap_mode="c")  # (N, 2K, L, M), float32
+    Y_mm = np.load(d / "Y.npy", mmap_mode="c")  # (N, K, L[,...]), float32
     L_max = int(json.loads((d / "meta.json").read_text())["L_max"])
     return torch.from_numpy(X_mm), torch.from_numpy(Y_mm), L_max
 
