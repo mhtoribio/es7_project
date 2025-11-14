@@ -1,6 +1,7 @@
 import sys
 from contextlib import contextmanager
 import os
+import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.run import main as dist_main
