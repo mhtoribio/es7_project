@@ -49,7 +49,7 @@ def train_psd_model(
     )
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
-    criterion = nn.MSELoss()  # For regression; use CrossEntropyLoss for classification
+    criterion = nn.L1Loss()
 
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     # Check if there are existing checkpoints
