@@ -13,5 +13,7 @@ p = common.parser_commands.add_parser(
     formatter_class = argparse.RawDescriptionHelpFormatter,
 )
 
+p.add_argument("--gpus", type=int, help="Number of GPUs available for training", required=False)
+
 def main(args):
-    train_psd_model.main()
+    train_psd_model.cmd_train(args)
