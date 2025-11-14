@@ -18,8 +18,8 @@ from seadge.utils.visualization import spectrogram
 from seadge.models.psd_cnn import SimplePSDCNN
 from seadge import config
 from seadge.utils.log import setup_logger
-
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
+from seadge.models import loss_functions
 
 # ugly hack but it works
 import argparse
@@ -124,7 +124,7 @@ def train_psd_model(
     )
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
-    criterion = nn.L1Loss()
+    criterion = lambda yhat, y: (loss_functions.lsd_from_logpower(yhat, y), None)
 
     # -----------------
     # Checkpoint resume (rank 0 decides epoch, all ranks load the same file)
@@ -178,7 +178,7 @@ def train_psd_model(
 
             optimizer.zero_grad(set_to_none=True)
             pred_psd = model(batch_x)
-            loss = criterion(pred_psd, batch_y)
+            loss, per_k = criterion(pred_psd, batch_y)
             loss.backward()
             optimizer.step()
 
@@ -222,7 +222,7 @@ def train_psd_model(
             batch_x = batch_x.to(device, non_blocking=True)
             batch_y = batch_y.to(device, non_blocking=True)
             test_pred = model(batch_x)
-            loss = criterion(test_pred, batch_y)
+            loss, per_k = criterion(test_pred, batch_y)
 
             bs = batch_x.size(0)
             test_loss_sum_local += float(loss.item()) * bs
