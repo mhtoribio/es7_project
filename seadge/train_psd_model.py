@@ -17,6 +17,7 @@ from seadge.utils.psd_data_loader import load_tensors_cache
 from seadge.utils.visualization import spectrogram
 from seadge.models.psd_cnn import SimplePSDCNN
 from seadge import config
+from seadge.utils.log import setup_logger
 
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
 
@@ -232,6 +233,7 @@ def train_psd_model(
 
 def main():
     cfg = config.get()
+    log.info(f"Hello")
 
     # Initialize DDP (or single-process fallback)
     use_ddp, rank, world_size, device = setup_distributed()
@@ -341,3 +343,6 @@ def cmd_train(args):
         module="seadge.train_psd_model",
         nproc=nproc,
     )
+
+if __name__ == "__main__":
+    main()
