@@ -21,6 +21,13 @@ from seadge.utils.log import setup_logger
 
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
 
+# ugly hack but it works
+import argparse
+def parse_args():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", type=str, default=None)
+    return ap.parse_args()
+
 
 def _is_main(rank: int) -> bool:
     return (rank == 0)
@@ -232,8 +239,10 @@ def train_psd_model(
 
 
 def main():
+    args = parse_args()
+    config.load(path=args.config, create_dirs=True)
     cfg = config.get()
-    log.info(f"Hello")
+    setup_logger(cfg.logging)
 
     # Initialize DDP (or single-process fallback)
     use_ddp, rank, world_size, device = setup_distributed()
@@ -339,9 +348,13 @@ def cmd_train(args):
         log.error(f"No GPUs specified/found.")
         exit()
     log.info(f"Launching training module on {nproc} GPUs")
+    extra = []
+    if args.config:
+        extra += ["--", "--config", str(args.config)]
     launch_ddp(
         module="seadge.train_psd_model",
         nproc=nproc,
+        extra_args=extra,
     )
 
 if __name__ == "__main__":
