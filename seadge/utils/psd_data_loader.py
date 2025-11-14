@@ -6,6 +6,7 @@ import time
 from typing import Tuple, List
 from tqdm.contrib.concurrent import process_map
 import os
+import json
 
 from seadge.utils.log import log
 from seadge.utils.files import files_in_path_recursive
@@ -77,10 +78,6 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
 
 def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:
     npz_files = list(files_in_path_recursive(npz_dir, "*.npz"))
-    try:
-        npz_files.remove(npz_dir / "tensors.npz")
-    except ValueError:
-        pass
     if num_max_npz > len(npz_files):
         log.warning(f"Desired number of npz files (scenarios) too large ({num_max_npz}). Only {len(npz_files)} found.")
     if num_max_npz == 0:
@@ -143,25 +140,21 @@ def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple
 
     return X, Y
 
-def load_tensors_cache(npz_dir: Path) -> tuple[torch.Tensor, torch.Tensor, int]:
-    cache_path = npz_dir / "tensors.npz"
-    payload = torch.load(cache_path, map_location="cpu")
-    X = payload["X"]
-    Y = payload["Y"]
-    L_max = payload["L_max"]
-    return X, Y, L_max
+def load_tensors_cache(cache_dir: Path) -> tuple[torch.Tensor, torch.Tensor, int]:
+    d = Path(cache_dir)
+    X_mm = np.load(d / "X.npy", mmap_mode="r")  # (N, 2K, L, M), float32
+    Y_mm = np.load(d / "Y.npy", mmap_mode="r")  # (N, K, L[,...]), float32
+    L_max = int(json.loads((d / "meta.json").read_text())["L_max"])
+    return torch.from_numpy(X_mm), torch.from_numpy(Y_mm), L_max
 
-def save_tensors_cache(npz_dir: Path, X: torch.Tensor, Y: torch.Tensor, *, L_max: int):
-    cache_path = npz_dir / "tensors.npz"
-    cache_path = Path(cache_path)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+def save_tensors_cache(cache_dir: Path, X: torch.Tensor, Y: torch.Tensor, *, L_max: int):
+    d = Path(cache_dir)
+    d.mkdir(parents=True, exist_ok=True)
 
-    payload = {
-        "X": X.cpu(),   # ensure on CPU
-        "Y": Y.cpu(),
-        "L_max": int(L_max),
-        "dtype": str(X.dtype),
-        "shape_X": tuple(X.shape),
-        "shape_Y": tuple(Y.shape),
-    }
-    torch.save(payload, cache_path)
+    X_cpu = X.detach().to("cpu", dtype=torch.float32, copy=False).contiguous()
+    Y_cpu = Y.detach().to("cpu", dtype=torch.float32, copy=False).contiguous()
+
+    np.save(d / "X.npy", X_cpu.numpy(), allow_pickle=False)
+    np.save(d / "Y.npy", Y_cpu.numpy(), allow_pickle=False)
+
+    (d / "meta.json").write_text(json.dumps({"L_max": int(L_max)}))

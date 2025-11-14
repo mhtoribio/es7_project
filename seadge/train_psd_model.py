@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.distributed as dist
+import torch.utils.data.distributed
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 import matplotlib.pyplot as plt
@@ -75,14 +76,17 @@ def train_psd_model(
     """DDP-aware training loop. Expects model already moved to device (and wrapped with DDP if use_ddp)."""
 
     # -----------------
-    # Split once (on CPU tensors). All ranks use the same split, samplers shard it.
+    # Efficient split by indices (no tensor copies, works with memmap-backed tensors)
     # -----------------
-    x_train, x_test, y_train, y_test = train_test_split(
-        x_tensor, y_tensor, test_size=test_size, shuffle=True
-    )
+    N = x_tensor.shape[0]
+    idx = torch.randperm(N)  # or a fixed permutation if you want reproducibility
+    cut = int(N * (1.0 - test_size))
+    idx_train = idx[:cut].tolist()
+    idx_test  = idx[cut:].tolist()
 
-    train_dataset = torch.utils.data.TensorDataset(x_train, y_train)
-    test_dataset  = torch.utils.data.TensorDataset(x_test,  y_test)
+    full_dataset = torch.utils.data.TensorDataset(x_tensor, y_tensor)
+    train_dataset = torch.utils.data.Subset(full_dataset, idx_train)
+    test_dataset  = torch.utils.data.Subset(full_dataset,  idx_test)
 
     # -----------------
     # Samplers & DataLoaders
@@ -91,7 +95,6 @@ def train_psd_model(
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
-        # For eval, use a distributed sampler without shuffle so each rank sees a disjoint shard.
         test_sampler = torch.utils.data.distributed.DistributedSampler(
             test_dataset, num_replicas=world_size, rank=rank, shuffle=False, drop_last=False
         )
@@ -103,14 +106,15 @@ def train_psd_model(
         train_shuffle = True
         test_shuffle = False
 
-    # You can tune num_workers/pin_memory to your IO
+    pin = (device.type == "cuda")
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=train_shuffle,
         sampler=train_sampler,
         num_workers=0,
-        pin_memory=True,
+        pin_memory=pin,
         drop_last=False,
     )
     test_loader = torch.utils.data.DataLoader(
@@ -119,7 +123,7 @@ def train_psd_model(
         shuffle=test_shuffle,
         sampler=test_sampler,
         num_workers=0,
-        pin_memory=True,
+        pin_memory=pin,
         drop_last=False,
     )
 
