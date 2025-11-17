@@ -50,7 +50,7 @@ class SimplePSDCNN(nn.Module):
         # x_ctx: (B, 2K, L, M)
         # output: (B, K, L, 1)
         x = F.relu(self.conv1(x_ctx))
-        x = F.relu(self.conv2(x_ctx))
+        x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x)).squeeze(3)
         x = self.conv4(x)
         return x
