@@ -4,11 +4,14 @@ level = 'debug'
 [paths]
 clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
+matfile_dir = "~/uni/p7/ISCLP-KF/param/SQRT_PSD_RETF"
 
 [dsp]
 datagen_samplerate = 48000
 enhancement_samplerate = 16000
 rirconv_xfade_ms = 64
+early_tmax_ms = 150
+early_offset_ms = 30
 
 [roomgen]
 rt60_min = 0.3

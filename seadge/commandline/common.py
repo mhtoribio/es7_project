@@ -3,7 +3,7 @@ import sys
 import pathlib
 import logging
 from seadge import config
-from seadge.utils.log import setup_logger
+from seadge.utils.log import setup_logger, log
 
 parser = argparse.ArgumentParser(description='SEADGE Command Line Interface',
                                  prog='seadge')
@@ -19,4 +19,6 @@ def entrypoint(commands):
     config.load(path=args.config, create_dirs=True)
     cfg = config.get()
     setup_logger(cfg.logging)
+    if cfg.debug:
+        log.info("Running SEADGE in debug mode")
     commands[args.command](args)

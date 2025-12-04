@@ -23,12 +23,13 @@ class PathsCfg(BaseModel):
     clean_dir: Path = Path("/tmp/seadge_clean")
     output_dir: Path = Path("/tmp/seadge_output")
     download_cache_dir: Path = Path("/tmp/seadge_download_cache")
+    matfile_dir: Path = Path("/tmp/seadge_matfiles") # matfiles for ISCLP manually added here (TODO download in download subcommand)
 
-    @field_validator("output_dir", "clean_dir", mode="before")
+    @field_validator("output_dir", "clean_dir", "download_cache_dir", "matfile_dir", mode="before")
     @classmethod
     def _normalize_output_dir(cls, v: Any) -> Path:
         if v is None or (isinstance(v, str) and v.strip() == ""):
-            raise ValueError("output_dir and clean_dir must be set (non-empty).")
+            raise ValueError("output_dir clean_dir, download_cache_dir and matfile_dir must be set (non-empty).")
         p = Path(v) if isinstance(v, (str, Path)) else v
         return p.expanduser().resolve()
 
@@ -66,14 +67,22 @@ class PathsCfg(BaseModel):
     @property
     def checkpoint_dir(self) -> Path: return self.output_dir / "checkpoints"
 
+class IsclpCfg(BaseModel):
+    L: int = 6                                        # Linear Prediction Length
+    alpha_ISCLP_exp_db: float = -25                   # Forgetting factor alpha exponent (1 - power)
+    psi_wLP_db: float = -4                            # LP filter variance (eq. 54)
+    psi_wSC_db_range: Tuple[float, float] = (0, -15)  # SC filter variance (eq. 53)
+    beta_ISCLP_db: float = -2                         # smoothing
+    retf_thres_db : float = -2                        # RETF update threshold
+
 class DspCfg(BaseModel):
     window_len: int = 512
     hop_size: int = 256
     window_type: str = "sqrt_hann"
     datagen_samplerate:     int = 48000
     enhancement_samplerate: int = 16000
-    early_ms: float = 32.0
-    early_taper_ms: float = 0.0
+    early_tmax_ms: float = 32.0
+    early_offset_ms: float = 0.0
 
     # spectogram figure settings
     # TODO make this fit with both samplerates
@@ -85,6 +94,9 @@ class DspCfg(BaseModel):
     rirconv_method    : str = "oaconv" # "oaconv" or "fft"
     rirconv_normalize : str = "none" # "none"|"direct"|"energy"
     rirconv_xfade_ms  : float = 64.0
+
+    # ISCLP (enhancement algorithm) config
+    isclpconf: IsclpCfg = Field(default_factory=IsclpCfg)
 
 
 class MicDesc(BaseModel):
@@ -258,7 +270,7 @@ class Config(BaseSettings):
           - scenario_duration_s (clean length)
           - datagen_samplerate
           - STFT window_len & hop_size
-          - an assumed max RIR length (here: dsp.early_ms)
+          - an assumed max RIR length (here: dsp.early_tmax_ms)
         """
 
         fs = self.dsp.enhancement_samplerate

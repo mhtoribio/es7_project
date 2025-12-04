@@ -3,7 +3,7 @@
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Optional
-from scipy.signal import oaconvolve, fftconvolve
+from scipy.signal import oaconvolve, fftconvolve, medfilt
 
 from seadge import config
 from seadge.utils.log import log
@@ -71,54 +71,84 @@ def _normalize_rir(H: np.ndarray, mode: Optional[str]) -> np.ndarray:
         return H / g
     return H
 
+def _find_direct_sample_idx(h, smooth=True, thresh_rel=0.1, min_idx=0):
+    """
+    h : 1D numpy array (room impulse response)
+    smooth : whether to apply median filter to the energy
+    thresh_rel : threshold as a fraction of max energy
+    min_idx : ignore indices before this (e.g. known pre-delay)
+    """
+    h = np.asarray(h)
+    # Energy envelope (squared magnitude)
+    e = h**2
+
+    # Optional smoothing to avoid picking random noise spikes
+    if smooth:
+        # kernel_size must be odd; tune as needed (e.g., 5–21)
+        e = medfilt(e, kernel_size=7)
+
+    # Normalize
+    e = e / (e.max() + 1e-12)
+
+    # Threshold
+    thresh = thresh_rel
+
+    # Find first index after min_idx where energy crosses threshold
+    idx_candidates = np.where(e[min_idx:] >= thresh)[0]
+    if len(idx_candidates) == 0:
+        # Fallback: use global max if no crossing found
+        return int(np.argmax(e))
+    else:
+        return int(min_idx + idx_candidates[0])
+
 def _early_rir(
-    H_RM: np.ndarray,
+    H: np.ndarray,
     *,
     fs: int,
-    early_ms: float,
-    taper_ms: float = 0.0,
+    early_tmax_ms: float,
+    offset_ms: float = 0.0,
 ) -> np.ndarray:
     """
-    Time-domain 'early' part of an M-channel RIR H_RM (R, M).
-
-    - early_ms: keep energy up to this time (in ms)
-    - taper_ms: optional cosine taper length (in ms) at the end of the early part.
-                0.0 => pure rectangular window.
+    Time-domain 'early' part of an M-channel RIR H (R, M).
+    Constant window for impulse response (based on arXiv:2505.01338)
 
     Returns: H_early with the same shape (R, M).
     """
-    H = np.asarray(H_RM, float)
+    #### 
+
     R, M = H.shape
 
-    # Early cutoff in samples
-    early_samp = int(round(early_ms * 1e-3 * fs))
-    early_samp = max(0, min(early_samp, R))
-    if early_samp == 0:
-        return np.zeros_like(H)
+    if offset_ms < 0.0:
+        log.warning(f"Config error {offset_ms=} cannot be negative when computing early RIR. Truncating to 0.")
+        offset_ms = 0
+    offset = int(round(offset_ms * 1e-3 * fs))
 
-    w = np.zeros(R, dtype=float)
+    # Find direct path sample idx
+    N1_perMic = []
+    for m in range(M):
+        N1_perMic.append(_find_direct_sample_idx(H[:,m]))
+    N1 = np.asarray(N1_perMic)
+    
+    # Convert tmax_60 from ms to samples
+    tmax_60 = int(round(early_tmax_ms * 1e-3 * fs))
+    tmax_60 = max(0, min(tmax_60, R))
 
-    if taper_ms <= 0.0:
-        # Pure rectangular: keep [0, early_samp)
-        w[:early_samp] = 1.0
-    else:
-        L_taper = int(round(taper_ms * 1e-3 * fs))
-        L_taper = max(1, min(L_taper, early_samp))
-        flat_end = early_samp - L_taper
+    # Effective N1 and Tmax_60 (after offset)
+    N1_eff = N1 + offset
+    Tmax_eff = tmax_60 - offset
 
-        # 1) Flat region
-        if flat_end > 0:
-            w[:flat_end] = 1.0
+    # Build the window
+    w = np.zeros_like(H, dtype=float)
+    for m in range(M):
+        # rectangular part
+        w[:N1_eff[m]+1, m] = 1
 
-        # 2) Cosine taper from 1 -> 0 over [flat_end, early_samp)
-        # half-cosine from 0..pi/2 gives smooth descent
-        t = np.linspace(0.0, np.pi / 2.0, L_taper, endpoint=False)
-        taper = np.cos(t)  # starts at 1, goes toward 0
-        w[flat_end:early_samp] = taper
+        # decaying part
+        q = 3 / Tmax_eff
+        n_delta = np.arange(1, R-N1_eff[m]) # n - N1
+        w[N1_eff[m]+1:, m] = np.float_power(10, -q * n_delta)
 
-        # rest stays 0
-
-    return H * w[:, None]
+    return H * w
 
 def _load_schedule(
     src: config.SourceSpec,
@@ -127,8 +157,8 @@ def _load_schedule(
     room_cfg,
     cache_root: Path,
     normalize: Optional[str],
-    early_ms: float | None = None,
-    early_taper_ms: float = 0.0,
+    early_tmax_ms: float | None = None,
+    early_offset_ms: float = 0.0,
 ) -> List[Tuple[int, np.ndarray]]:
     """
     Load [(start_sample, H(R,M)), ...] from cache. No recompute; raises on miss.
@@ -138,8 +168,8 @@ def _load_schedule(
     for loc in src.location_history:
         key = make_rir_cache_key(room_cfg, fs, loc)
         H = load_rir_mem_or_die(key, str(cache_root))  # raises if missing
-        if early_ms is not None:
-            H = _early_rir(H, fs=fs, early_ms=early_ms, taper_ms=early_taper_ms)
+        if early_tmax_ms is not None:
+            H = _early_rir(H, fs=fs, early_tmax_ms=early_tmax_ms, offset_ms=early_offset_ms)
         H = _normalize_rir(H, normalize)
         schedule.append((int(loc.start_sample), H))
     schedule.sort(key=lambda t: t[0])
@@ -324,8 +354,8 @@ def sim_distant_src(
     fs: int,
     room_cfg,             # RoomCfg (mic_pos already expanded)
     cache_root: Path,
-    early_ms: float | None = None,
-    early_taper_ms: float = 0.0,
+    early_tmax_ms: float | None = None,
+    early_offset_ms: float = 0.0,
     xfade_ms: float = 64.0,
     method: str = "oaconv",           # "oaconv" or "fft"
     normalize: Optional[str] = "direct",  # None|"direct"|"energy"
@@ -343,7 +373,7 @@ def sim_distant_src(
 
     # 1) schedule: (start_sample, H(R,M))
     schedule: List[Tuple[int, np.ndarray]] = _load_schedule(
-        src, fs=fs, room_cfg=room_cfg, cache_root=cache_root, normalize=normalize, early_ms=early_ms, early_taper_ms=early_taper_ms
+        src, fs=fs, room_cfg=room_cfg, cache_root=cache_root, normalize=normalize, early_tmax_ms=early_tmax_ms, early_offset_ms=early_offset_ms
     )
 
     if not schedule:
@@ -419,7 +449,7 @@ def animate_rir_time(
     N: int,                            # timeline length to animate (samples)
     fps: int = 30,
     duration_s: float | None = None,
-    early_ms: float | None = None,     # show only first X ms of the RIR
+    early_tmax_ms: float | None = None,     # show only first X ms of the RIR
     normalize: str | None = "direct",  # must match renderer
     mics_overlay: bool = True,
     share_ylim: bool = True,
@@ -451,8 +481,8 @@ def animate_rir_time(
         raise ValueError("No frames to animate (Nt=0). Increase duration or fps.")
 
     # Plot axis (lag)
-    if early_ms is not None:
-        Rplot = min(Rmax, int(round(early_ms * 1e-3 * fs)))
+    if early_tmax_ms is not None:
+        Rplot = min(Rmax, int(round(early_tmax_ms * 1e-3 * fs)))
     else:
         Rplot = Rmax
     tau_ms = (np.arange(Rplot) / fs) * 1000.0

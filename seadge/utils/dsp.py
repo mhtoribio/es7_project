@@ -80,3 +80,9 @@ def resampling_values(fs_from: int, fs_to: int) -> tuple[int, int]:
 
 def complex_to_mag_phase(x):
     return np.abs(x), np.angle(x)
+
+def db2pow(x):
+    return 10**(x/10)
+
+def db2mag(x):
+    return 10**(x/20)

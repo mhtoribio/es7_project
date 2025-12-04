@@ -73,9 +73,9 @@ def simulate_one_scenario(
         xfade_ms: float,
         convmethod: str,
         normalize: str | None,
-        early_ms: float,
-        early_taper_ms: float,
-        ) -> tuple[str, np.ndarray]:
+        early_tmax_ms: float,
+        early_offset_ms: float,
+        ) -> tuple[str, np.ndarray, np.ndarray]:
     scen_hash = make_pydantic_cache_key(scen)
     log.debug(f"Simulating scenario {scen_hash}")
     room = config.load_room(room_dir / f"{scen.room_id}.room.json")
@@ -110,8 +110,8 @@ def simulate_one_scenario(
                 xfade_ms=xfade_ms,
                 method=convmethod,
                 normalize=normalize,
-                early_ms=None,
-                early_taper_ms=0.0,
+                early_tmax_ms=None,
+                early_offset_ms=0.0,
                 )
         distant_src_ch.append(x)
 
@@ -134,8 +134,8 @@ def simulate_one_scenario(
                 xfade_ms=xfade_ms,
                 method=convmethod,
                 normalize=normalize,
-                early_ms=early_ms,
-                early_taper_ms=early_taper_ms,
+                early_tmax_ms=early_tmax_ms,
+                early_offset_ms=early_offset_ms,
                 )
         early_src_ch.append(s)
 
@@ -167,7 +167,7 @@ def simulate_one_scenario(
     np.savez_compressed(path, Y=y_stft_enh.astype(np.complex64),
                         S_early=s_stft_enh.astype(np.complex64))
 
-    return scen_hash, y_gen
+    return scen_hash, y_gen, early_src_ch[0]
 
 def _simulate_one_file(
     scenfile: Path,
@@ -180,12 +180,12 @@ def _simulate_one_file(
     xfade_ms: float,
     convmethod: str,
     normalize: str | None,
-    early_ms: float,
-    early_taper_ms: float,
+    early_tmax_ms: float,
+    early_offset_ms: float,
     outpath: Path,
 ):
     scen = load_scenario(scenfile)
-    scen_hash, x = simulate_one_scenario(
+    scen_hash, y, s = simulate_one_scenario(
         scen=scen,
         room_dir=room_dir,
         debug_dir=debug_dir,
@@ -196,10 +196,14 @@ def _simulate_one_file(
         xfade_ms=xfade_ms,
         convmethod=convmethod,
         normalize=normalize,
-        early_ms=early_ms,
-        early_taper_ms=early_taper_ms,
+        early_tmax_ms=early_tmax_ms,
+        early_offset_ms=early_offset_ms,
     )
-    write_wav(outpath / f"{scen_hash}.wav", x, fs=fs_datagen)
+    interp, decim = resampling_values(fs_datagen, fs_enhancement)
+    y_resampled = resample_poly(y, interp, decim)
+    write_wav(outpath / f"{scen_hash}.wav", y_resampled, fs=fs_enhancement)
+    s_resampled = resample_poly(s[:,0], interp, decim)
+    write_wav(outpath / f"{scen_hash}_target.wav", s_resampled, fs=fs_enhancement)
 
 def simulate_scenarios(
     scenario_dir: Path,
@@ -213,8 +217,8 @@ def simulate_scenarios(
     xfade_ms: float,
     convmethod: str,
     normalize: str | None,
-    early_ms: float,
-    early_taper_ms: float,
+    early_tmax_ms: float,
+    early_offset_ms: float,
 ):
     slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
     num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
@@ -233,8 +237,8 @@ def simulate_scenarios(
         xfade_ms=xfade_ms,
         convmethod=convmethod,
         normalize=normalize,
-        early_ms=early_ms,
-        early_taper_ms=early_taper_ms,
+        early_tmax_ms=early_tmax_ms,
+        early_offset_ms=early_offset_ms,
         outpath=outpath,
     )
 
@@ -260,13 +264,13 @@ def main():
         outpath=cfg.paths.distant_dir,
         rir_cache_dir=cfg.paths.rir_cache_dir,
         room_dir=cfg.paths.room_dir,
-        debug_dir=cfg.paths.debug_dir if cfg.debug else None,
+        debug_dir=cfg.paths.debug_dir/"distant" if cfg.debug else None,
         ml_data_dir=cfg.paths.ml_data_dir,
         fs_datagen=cfg.dsp.datagen_samplerate,
         fs_enhancement=cfg.dsp.enhancement_samplerate,
         xfade_ms=cfg.dsp.rirconv_xfade_ms,
         convmethod=cfg.dsp.rirconv_method,
         normalize=cfg.dsp.rirconv_normalize,
-        early_ms=cfg.dsp.early_ms,
-        early_taper_ms=cfg.dsp.early_taper_ms,
+        early_tmax_ms=cfg.dsp.early_tmax_ms,
+        early_offset_ms=cfg.dsp.early_offset_ms,
     )
