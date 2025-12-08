@@ -32,11 +32,14 @@ def _rel_wav_path(p: Path, base: Path) -> str:
 def gen_one_scenario(
     room: config.RoomCfg,
     wav_files: list[Path],
+    noise_files: list[Path],
     *,
     fs_target: int,                   # target samplerate (e.g., cfg.dsp.samplerate)
     scenario_duration_s: float,       # total timeline in samples (fs_target domain)
     min_interference_volume: float,
     max_interference_volume: float,
+    min_noise_volume: float,
+    max_noise_volume: float,
     num_speakers: int | None = None,  # default: len(room.sources)
     min_wavsource_duration_s: float | None = None,  # None -> equals scenario_duration
     rng: np.random.Generator | None = None,
@@ -148,13 +151,40 @@ def gen_one_scenario(
     target.volume = 1.0 # target always at volume 1.0
     others = [w for j, w in enumerate(wavsources) if j != target_idx]
 
+    # Add noise sources
+    noise_wavsources: list[WavSource] = []
+    # Add all noise sources available. Choose by modifying noise path or noise dir contents
+    for path in noise_files:
+        try:
+            fs_from = int(wavfile_samplerate(path))
+        except Exception:
+            # If we can’t read header, fail scenario generation cleanly
+            return None
+
+        L, M = resampling_values(fs_from, fs_target)
+        dur = scenario_duration
+        delay = 0
+        volume = float(rng.uniform(min_noise_volume, max_noise_volume))
+        noise_wavsources.append(
+            WavSource(
+                wav_path=_rel_wav_path(Path(path), clean_base),
+                volume=volume,
+                sourceloc=0,
+                delay_samples=int(delay),
+                duration_samples=int(dur),
+                decimation=int(M),
+                interpolation=int(L),
+            )
+        )
+
     # Assemble Scenario
     scen = Scenario(
         scenario_type="speaker_mixture",
         room_id=room_hash,
         duration_samples=int(scenario_duration),
         target_speaker=target,
-        other_sources=others,
+        interferent_speakers=others,
+        noise_sources=noise_wavsources,
     )
 
     # Pydantic validation will run here; if it fails, return None
@@ -168,6 +198,7 @@ def gen_one_scenario(
 def _gen_scenarios_for_room(
     room_path: Path,
     wav_files: list[Path],
+    noise_files: list[Path],
     scengen_cfg,
     fs: int,
     outpath: Path,
@@ -181,16 +212,22 @@ def _gen_scenarios_for_room(
         f"for room {room_key}"
     )
 
+    if room.noise_source and len(noise_files) < 1:
+        log.error(f"Not enough noise wav files")
+
     n_ok = 0
     for i in range(scengen_cfg.scenarios_per_room):
         log.debug(f"Generating scenario {i} for room {room_key}")
         scen = gen_one_scenario(
             room,
             wav_files,
+            noise_files,
             fs_target=fs,
             scenario_duration_s=scengen_cfg.scenario_duration_s,
             min_interference_volume=scengen_cfg.min_interference_volume,
             max_interference_volume=scengen_cfg.max_interference_volume,
+            min_noise_volume=scengen_cfg.min_noise_volume,
+            max_noise_volume=scengen_cfg.max_noise_volume,
             num_speakers=scengen_cfg.num_speakers,
             min_wavsource_duration_s=scengen_cfg.effective_min_wavsource_duration_s,
         )
@@ -209,11 +246,13 @@ def gen_scenarios(
     room_dir: Path,
     outpath: Path,
     wav_dir: Path,
+    noise_dir: Path,
     scengen_cfg: config.ScenarioGenCfg,
     fs: int,
 ):
     room_files = list(files_in_path_recursive(room_dir, "*.room.json"))
     wav_files = list(files_in_path_recursive(wav_dir, "*.wav"))
+    noise_files = list(files_in_path_recursive(noise_dir, "*.wav")) # len checked in sub function
     outpath.mkdir(parents=True, exist_ok=True)
 
     if not room_files:
@@ -227,6 +266,7 @@ def gen_scenarios(
     worker = partial(
         _gen_scenarios_for_room,
         wav_files=wav_files,
+        noise_files=noise_files,
         scengen_cfg=scengen_cfg,
         fs=fs,
         outpath=outpath,
@@ -248,6 +288,7 @@ def main():
         room_dir=cfg.paths.room_dir,
         outpath=cfg.paths.scenario_dir,
         wav_dir=cfg.paths.clean_dir,
+        noise_dir=cfg.paths.noise_dir,
         scengen_cfg=cfg.scenariogen,
         fs=cfg.dsp.datagen_samplerate,
     )

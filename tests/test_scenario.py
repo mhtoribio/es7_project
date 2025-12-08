@@ -62,7 +62,7 @@ class TestScenarioValidation(unittest.TestCase):
                 "decimation": 3,
                 "interpolation": 1,
             },
-            "other_sources": [
+            "interferent_speakers": [
                 {
                     "wav_path": str(self.rel_wav),
                     "volume": 0.8,
@@ -159,9 +159,9 @@ class TestScenarioValidation(unittest.TestCase):
             with self.assertRaises(Exception):
                 Scenario.model_validate(scen)
 
-    def test_other_sources_not_list_raises(self):
+    def test_interferent_speakers_not_list_raises(self):
         scen = self._base_scenario()
-        scen["other_sources"] = {"oops": "not a list"}
+        scen["interferent_speakers"] = {"oops": "not a list"}
         with ExitStack() as stack:
             self._enter_patches(stack)
             with self.assertRaises(Exception):
@@ -175,9 +175,9 @@ class TestScenarioValidation(unittest.TestCase):
             with self.assertRaises(Exception):
                 Scenario.model_validate(scen)
 
-    def test_other_sources_none_ok(self):
+    def test_interferent_speakers_none_ok(self):
         scen = self._base_scenario()
-        scen["other_sources"] = None
+        scen["interferent_speakers"] = None
         with ExitStack() as stack:
             self._enter_patches(stack)
             model = Scenario.model_validate(scen)

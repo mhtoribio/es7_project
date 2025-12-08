@@ -313,6 +313,15 @@ def gen_source_locs(
 
     return sources
 
+def gen_noise_source(room_dimensions: tuple[float, float, float]) -> config.SourceSpec:
+    rx, ry, _ = room_dimensions
+    loc = config.SourceSpec.LocationSpec(
+        pattern="omni",
+        start_sample=0,
+        location_m=(round(rx/2, 4), round(ry/2, 4), round(1.2, 4)),
+    )
+    return config.SourceSpec(location_history=[loc])
+
 def gen_random_room(gencfg: config.RoomGenCfg) -> config.RoomCfg:
     room = config.RoomCfg()
     room.max_image_order = gencfg.max_image_order
@@ -343,6 +352,8 @@ def gen_random_room(gencfg: config.RoomGenCfg) -> config.RoomCfg:
         max_azimuth_rotation_deg=gencfg.max_azimuth_rotation_deg,
         mic_locs=mic_locs,
     )
+
+    room.noise_source = gen_noise_source(room.dimensions_m) if gencfg.enable_noise else None
 
     return room
 

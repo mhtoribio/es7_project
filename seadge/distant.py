@@ -81,15 +81,21 @@ def simulate_one_scenario(
     room = config.load_room(room_dir / f"{scen.room_id}.room.json")
     clean_src_ch = [np.zeros(scen.duration_samples, dtype=float) for _ in range(len(room.sources))]
 
-    # Simulate target speaker
+    # Load target speaker
     x, loc = prepare_source(scen.target_speaker, scen.duration_samples)
     clean_src_ch[loc] += x
 
-    # Simulate other speakers
-    if scen.other_sources:
-        for wavsrc in scen.other_sources:
+    # Load other speakers
+    if scen.interferent_speakers:
+        for wavsrc in scen.interferent_speakers:
             x, loc = prepare_source(wavsrc, scen.duration_samples)
             clean_src_ch[loc] += x
+
+    # Load noises
+    clean_noise = np.zeros(scen.duration_samples, dtype=float)
+    for noise_src in scen.noise_sources:
+        x, _ = prepare_source(noise_src, scen.duration_samples)
+        clean_noise += x
 
     # Debug files (clean sources)
     if debug_dir:
@@ -99,6 +105,11 @@ def simulate_one_scenario(
             path.parent.mkdir(parents=True, exist_ok=True)
             log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
             wavfile.write(path, fs_datagen, clean)
+
+        # noise file
+        path = debug_dir / scen_hash / f"clean_noise.wav"
+        log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
+        wavfile.write(path, fs_datagen, clean_noise)
 
     # Simulate distant sources
     distant_src_ch = []
@@ -114,6 +125,20 @@ def simulate_one_scenario(
                 early_offset_ms=0.0,
                 )
         distant_src_ch.append(x)
+    # noise
+    if room.noise_source:
+        distant_noise = sim_distant_src(
+                clean_noise, room.noise_source,
+                fs=fs_datagen, room_cfg=room,
+                cache_root=rir_cache_dir,
+                xfade_ms=xfade_ms,
+                method=convmethod,
+                normalize=normalize,
+                early_tmax_ms=None,
+                early_offset_ms=0.0,
+                )
+    else:
+        distant_noise = np.zeros_like(distant_src_ch[0])
 
     # Debug files (distant sources)
     if debug_dir:
@@ -123,6 +148,11 @@ def simulate_one_scenario(
             path.parent.mkdir(parents=True, exist_ok=True)
             log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
             wavfile.write(path, fs_datagen, distant)
+
+        # noise file
+        path = debug_dir / scen_hash / f"distant_noise.wav"
+        log.debug(f"Writing debug file {path.relative_to(debug_dir)}")
+        wavfile.write(path, fs_datagen, distant_noise)
 
     # Simulate early source images
     early_src_ch = []
@@ -149,9 +179,10 @@ def simulate_one_scenario(
             wavfile.write(path, fs_datagen, s)
 
     # Mix distant sources to single
-    shapes = [x.shape for x in distant_src_ch]
+    shapes = [x.shape for x in distant_src_ch] + [distant_noise.shape]
     out_len, M = map(max, zip(*shapes))
     y_gen = np.zeros((out_len, M), dtype=float)
+    y_gen[:distant_noise.shape[0], :] += distant_noise # additive noise
     for i, x in enumerate(distant_src_ch):
         y_gen[:x.shape[0],:] += x
 

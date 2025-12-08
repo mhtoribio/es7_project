@@ -5,6 +5,7 @@ level = 'debug'
 clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
 matfile_dir = "~/uni/p7/ISCLP-KF/param/SQRT_PSD_RETF"
+noise_dir = "~/uni/es7_project/audio/clean_noise/normalized"
 
 [dsp]
 datagen_samplerate = 48000
@@ -21,6 +22,7 @@ max_dimensions_m = [8.0, 10.0, 4.0]
 max_image_order = 10
 
 num_generated_rooms = 2
+enable_noise = true
 
 min_num_source_locations = 1
 max_num_source_locations = 1

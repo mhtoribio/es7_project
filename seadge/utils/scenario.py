@@ -59,7 +59,8 @@ class Scenario(BaseModel):
     duration_samples: int
     scenario_type: Optional[str] = None
     target_speaker: WavSource
-    other_sources: Optional[List[WavSource]] = Field(default_factory=list)
+    interferent_speakers: List[WavSource] = Field(default_factory=list)
+    noise_sources: List[WavSource] = Field(default_factory=list)
 
     @field_validator("room_id")
     @classmethod
@@ -68,7 +69,7 @@ class Scenario(BaseModel):
             raise ValueError("room_id must be a 40-char lowercase SHA-1 hex string")
         return v
 
-    @field_validator("other_sources", mode="before")
+    @field_validator("interferent_speakers", mode="before")
     @classmethod
     def _none_to_empty(cls, v):
         return [] if v is None else v
@@ -84,13 +85,13 @@ class Scenario(BaseModel):
 
         # timing consistency vs top-level duration
         self._check_timing(self.target_speaker, "target_speaker")
-        for i, s in enumerate(self.other_sources or []):
-            self._check_timing(s, f"other_sources[{i}]")
+        for i, s in enumerate(self.interferent_speakers or []):
+            self._check_timing(s, f"interferent_speakers[{i}]")
 
         # file existence + length + effective samplerate match
         self._check_file_ok(self.target_speaker, "target_speaker")
-        for i, s in enumerate(self.other_sources or []):
-            self._check_file_ok(s, f"other_sources[{i}]")
+        for i, s in enumerate(self.interferent_speakers or []):
+            self._check_file_ok(s, f"interferent_speakers[{i}]")
 
         return self
 

@@ -77,15 +77,21 @@ class SourcePoses:
     """Iterate all (src_idx, pose_idx, src, loc) across the config."""
     def __init__(self, room_cfg):
         self._room_cfg = room_cfg
-        self._total = sum(len(_history(s)) for s in room_cfg.sources)
+        self._num_noise = 1 if room_cfg.noise_source else 0
+        self._total = sum(len(_history(s)) for s in room_cfg.sources) + self._num_noise
 
     def __len__(self) -> int:
         return self._total
 
     def __iter__(self) -> Iterator[Tuple[int, int, Any, Any]]:
-        for i, src in enumerate(self._room_cfg.sources):
-            for j, loc in enumerate(_history(src)):
-                yield i, j, src, loc
+        if self._room_cfg.noise_source:
+            for i, src in enumerate(self._room_cfg.sources + [self._room_cfg.noise_source]):
+                for j, loc in enumerate(_history(src)):
+                    yield i, j, src, loc
+        else:
+            for i, src in enumerate(self._room_cfg.sources):
+                for j, loc in enumerate(_history(src)):
+                    yield i, j, src, loc
 
 def _history(src):
     # Support either field name

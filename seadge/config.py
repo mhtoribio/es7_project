@@ -24,6 +24,7 @@ class PathsCfg(BaseModel):
     output_dir: Path = Path("/tmp/seadge_output")
     download_cache_dir: Path = Path("/tmp/seadge_download_cache")
     matfile_dir: Path = Path("/tmp/seadge_matfiles") # matfiles for ISCLP manually added here (TODO download in download subcommand)
+    noise_dir: Path = Path("/tmp/seadge_noise") # Noise wav files manually added here
 
     @field_validator("output_dir", "clean_dir", "download_cache_dir", "matfile_dir", mode="before")
     @classmethod
@@ -141,6 +142,7 @@ class RoomCfg(BaseModel):
     # Accept either a MicDesc (expanded automatically) or explicit positions
     mic_pos: Union[MicDesc, List[Tuple[float, float, float]]] = Field(default_factory=MicDesc)
     sources: List[SourceSpec] = Field(default_factory=list)
+    noise_source: Optional[SourceSpec] = Field(default=None) # currently only 1 fixed noise source/location supported
 
     @model_validator(mode="after")
     def _expand_and_validate(self):
@@ -178,6 +180,8 @@ class RoomGenCfg(BaseModel):
 
     num_generated_rooms: int = 3
 
+    enable_noise: bool = False
+
     min_num_source_locations: int = 2
     max_num_source_locations: int = 5
     # Minimum distances from sources to wall and mic
@@ -201,6 +205,8 @@ class ScenarioGenCfg(BaseModel):
     scenario_duration_s: Annotated[float,  Field(gt=0)] = 5.0
     min_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
     max_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
+    min_noise_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
+    max_noise_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
     scenarios_per_room: Annotated[int, Field(gt=0)] = 5
 
     # optional
