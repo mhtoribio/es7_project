@@ -13,7 +13,7 @@ p = common.parser_commands.add_parser(
     formatter_class = argparse.RawDescriptionHelpFormatter,
 )
 
-parser_subcommands = p.add_subparsers(dest='subcommand')
+parser_subcommands = p.add_subparsers(dest='subcommand', help="only run certain step of datagen (will run all except download if this argument is not specified)")
 
 subcommands = {
     "rir": room_modelling.main,
@@ -66,10 +66,17 @@ p_sub_tensor = parser_subcommands.add_parser(
     formatter_class = argparse.RawDescriptionHelpFormatter,
     )
 
-def main(args):
-    if not args.subcommand:
-        p.print_usage()
-        sys.exit()
+def _gen_all():
+    room_generation.main()
+    room_modelling.main()
+    scenario_generation.main()
+    distant.main()
+    prepare_psd_tensors.main()
 
+def main(args):
     log.info("Running datagen")
-    subcommands[args.subcommand]()
+    if not args.subcommand:
+        log.info("No subcommand specified. Running all steps (except data download)")
+        _gen_all()
+    else:
+        subcommands[args.subcommand]()

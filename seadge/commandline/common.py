@@ -1,7 +1,6 @@
 import argparse
 import sys
 import pathlib
-import logging
 from seadge import config
 from seadge.utils.log import setup_logger, log
 
