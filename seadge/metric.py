@@ -17,10 +17,12 @@ from pathlib import Path
 from functools import partial
 from multiprocessing import Pool
 
+from seadge.utils import dsp
 from seadge.utils.log import log
 from seadge.utils.files import files_in_path_recursive
 from seadge.utils.scenario import load_scenario
 from seadge.utils.cache import make_pydantic_cache_key
+from seadge.utils.visualization import spectrogram
 from seadge.utils.wavfiles import load_wav
 from seadge import config
 
@@ -61,7 +63,15 @@ def _metrics_for_one_scenario(
         target = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         results[algo] = _metrics(target, distant)
-        # TODO create spectrograms if debug_dir
+        if debug_dir:
+            X = dsp.stft(distant, dspconf.enhancement_samplerate)
+            if algo == "target":
+                title = "Target Speech"
+            elif algo == "distant":
+                title = "Distant Noisy Speech"
+            else:
+                title = f"Enhanced Speech ({algo})"
+            spectrogram(X, debug_dir/f"{scen_hash}_{algo}.png", title=title, x_tick_prop=dspconf.x_tick_prop, y_tick_prop=dspconf.y_tick_prop, c_range=dspconf.c_range)
 
     if debug_dir:
         import json
