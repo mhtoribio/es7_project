@@ -24,6 +24,8 @@ dependencies = [
   "requests>=2.32",
   "torch>=2.9",
   "scikit-learn>=1.6",
+  "pystoi>=0.4.1",
+  "pesq>=0.0.4",
 ]
 
 # optional URL field based on your setup.py

@@ -16,6 +16,8 @@ from tqdm import tqdm
 from pathlib import Path
 from functools import partial
 from multiprocessing import Pool
+from pystoi import stoi
+from pesq import pesq
 
 from seadge.utils import dsp
 from seadge.utils.log import log
@@ -29,13 +31,12 @@ from seadge import config
 def _metrics(
     target: np.ndarray,
     distant: np.ndarray,
+    fs: int,
 ) -> dict[str, float]:
     results = {}
-
-    # FIXME DEBUG only when testing the pipeline
-    import random
-    results["test_metric1"] = random.uniform(2.0, 4.5)
-    results["test_metric2"] = random.uniform(1.0, 3.0)
+    results["stoi"] = stoi(target, distant, fs, extended=False)
+    results["estoi"] = stoi(target, distant, fs, extended=True)
+    results["pesq"] = pesq(fs, target, distant, 'wb')
     return results
 
 def _metrics_for_one_scenario(
@@ -62,7 +63,8 @@ def _metrics_for_one_scenario(
         algo_enh_dir = enhanced_dir / algo
         target = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
-        results[algo] = _metrics(target, distant)
+        distant = distant[:len(target)] # make distant same length as target. They have same offset from their RIRs.
+        results[algo] = _metrics(target, distant, dspconf.enhancement_samplerate)
         if debug_dir:
             X = dsp.stft(distant, dspconf.enhancement_samplerate)
             if algo == "target":
