@@ -10,6 +10,7 @@ import os
 from seadge.utils.dsp import db2pow, db2mag, stft, istft
 from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
+from seadge.utils.wavfiles import load_wav, write_wav
 from seadge.utils.visualization import spectrogram
 from seadge.utils.scenario import load_scenario
 from seadge.utils.cache import make_pydantic_cache_key
@@ -46,10 +47,9 @@ def enhance_isclp_kf(
         s: np.ndarray[tuple[int], np.dtype[np.float32]],
         isclp_conf: ISCLPConfig,
         debug_dir: Path | None,
-        outpath: Path,
         lap_div_file: Path,
         alpha_file: Path,
-        ):
+        ) -> [np.ndarray, np.ndarray]:
     if debug_dir:
         debug_dir.mkdir(exist_ok=True, parents=True)
     # Initialization / Params
@@ -153,8 +153,10 @@ def enhance_isclp_kf(
     e_post_smooth_TD = istft(e_post_smooth_STFT, fs)
 
     if debug_dir:
-        wavfile.write(debug_dir / "e_post.wav", fs, e_post_TD)
-        wavfile.write(debug_dir / "e_post_smooth.wav", fs, e_post_smooth_TD)
+        write_wav(debug_dir / "e_post.wav", e_post_TD, fs=fs)
+        write_wav(debug_dir / "e_post_smooth.wav", e_post_smooth_TD, fs=fs)
+
+    return e_post_TD, e_post_smooth_TD
 
 def _enhance_one_file(
     scenfile: Path,
@@ -205,33 +207,23 @@ def _enhance_one_file(
     )
 
     # Load distant and clean speech
-    distant_file = distant_dir / f"{scen_hash}.wav"
-    fs_wav, y = wavfile.read(distant_file)
-    if fs_wav != dspconf.enhancement_samplerate:
-        log.error(f"Mismatch in sample rate for distant wav file ({distant_file}) {fs_wav=} != {dspconf.enhancement_samplerate=}")
-        exit(-1)
-    if y.ndim != 2:
-        log.error(f"Error for {distant_file} {y.shape=} (expected ndim=2)")
-        exit(-1)
+    y = load_wav(distant_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=2)
+    s = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
 
-    target_file = distant_dir / f"{scen_hash}_target.wav"
-    fs_wav, s = wavfile.read(target_file)
-    if fs_wav != dspconf.enhancement_samplerate:
-        log.error(f"Mismatch in sample rate for distant wav file ({distant_file}) {fs_wav=} != {dspconf.enhancement_samplerate=}")
-        exit(-1)
-    if s.ndim != 1:
-        log.error(f"Error for {target_file} {s.shape=} (expected ndim=1)")
-        exit(-1)
-
-    enhance_isclp_kf(
+    e, e_smooth = enhance_isclp_kf(
         y = y,
         s = s,
         isclp_conf = isclp_conf,
         debug_dir = debug_dir / "isclp" / f"{scen_hash}" if debug_dir else None,
-        outpath = outdir / "{scen_hash}",
         lap_div_file = lap_div_file,
         alpha_file = alpha_file,
     )
+    # Write results
+    write_wav(outdir / "isclp-kf" / f"{scen_hash}.wav", e, fs=dspconf.enhancement_samplerate)
+    write_wav(outdir / "isclp-kf-smooth" / f"{scen_hash}.wav", e_smooth, fs=dspconf.enhancement_samplerate)
+    # also write target and distant for metric computation
+    write_wav(outdir / "target" / f"{scen_hash}.wav", s, fs=dspconf.enhancement_samplerate)
+    write_wav(outdir / "distant" / f"{scen_hash}.wav", y[:,0], fs=dspconf.enhancement_samplerate) # mic 0 as ref mic
 
 def enhance_scenarios(
     scenario_dir: Path,

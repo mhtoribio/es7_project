@@ -32,10 +32,24 @@ def load_and_resample_source(source_spec: dict) -> np.ndarray:
     log.debug(f"Resampled wavfile with {decimation=} and {interpolation=} from {fs} to {fs*interpolation//decimation} ({x_resampled.shape=})")
     return x_resampled
 
-def write_wav(path: pathlib.Path, x: np.ndarray, fs: Optional[int] = None):
+def load_wav(path: pathlib.Path, expected_fs: Optional[int] = None, expected_ndim: Optional[int] = None, mmap: bool = False) -> np.ndarray:
+    """
+    Loads wav file with the option to provide expected samplerate and ndim.
+    NOTE! Will intentionally crash if samplerate or ndim do not match.
+    """
+    fs_wav, s = wavfile.read(path, mmap=mmap)
+    if expected_fs:
+        if fs_wav != expected_fs:
+            log.error(f"Mismatch fs for {path}: {fs_wav=} != {expected_fs=}")
+            raise ValueError
+    if expected_ndim:
+        if s.ndim != expected_ndim:
+            log.error(f"Mismatch ndim for {path}: {s.ndim=} != {expected_ndim=} ({s.shape=})")
+            raise ValueError
+    return s
+
+def write_wav(path: pathlib.Path, x: np.ndarray, fs: int):
     cfg = config.get()
+    path.parent.mkdir(exist_ok=True)
     log.debug(f"Writing {x.shape} array to wav file {path.relative_to(cfg.paths.output_dir)}")
-    if fs is None:
-        wavfile.write(path, cfg.dsp.datagen_samplerate, x)
-    else:
-        wavfile.write(path, fs, x)
+    wavfile.write(path, fs, x)

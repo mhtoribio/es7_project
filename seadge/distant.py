@@ -191,9 +191,9 @@ def simulate_one_scenario(
 
     # Calculate values for ML
     path = ml_data_dir / f"{scen_hash}.npz"
-    log.debug(f"Saving PSD training data {path}")
     y_stft_enh = calc_y_stft_enh(y_gen, fs_datagen, fs_enhancement)
     s_stft_enh = calc_s_stft_enh(early_src_ch, fs_datagen, fs_enhancement)
+    log.debug(f"Saving PSD training data {path} ({y_stft_enh.shape=}, {s_stft_enh.shape=})")
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, Y=y_stft_enh.astype(np.complex64),
                         S_early=s_stft_enh.astype(np.complex64))
