@@ -36,7 +36,9 @@ def _metrics(
     results = {}
     results["stoi"] = stoi(target, distant, fs, extended=False)
     results["estoi"] = stoi(target, distant, fs, extended=True)
-    results["pesq"] = pesq(fs, target, distant, 'wb', on_error=PesqError.RETURN_VALUES)
+    p = pesq(fs, target, distant, 'wb', on_error=PesqError.RETURN_VALUES)
+    if p > 0:
+        results["pesq"] = p
     return results
 
 def _metrics_for_one_scenario(
