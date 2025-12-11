@@ -14,7 +14,7 @@ class SimplePSDCNN(nn.Module):
         c_out = num_freqbins
         c_hidden = c_in
 
-        frames = 25
+        frames = 11
         if frames % 2 == 0:
             log.error(f"Only odd frame numbers are supported for kernel size")
         if num_mics % 2 == 0:
@@ -29,18 +29,12 @@ class SimplePSDCNN(nn.Module):
             padding=(framepad, micpad),
         )
         self.conv2 = nn.Conv2d(
-            in_channels=c_in,
-            out_channels=c_hidden,
-            kernel_size=(frames, num_mics),   # frames x mic
-            padding=(framepad, micpad),
-        )
-        self.conv3 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
             kernel_size=(frames, num_mics),
             padding=(framepad, 0),
         )
-        self.conv4 = nn.Conv1d(
+        self.conv3 = nn.Conv1d(
             in_channels=c_hidden,
             out_channels=c_out,
             kernel_size=1,
@@ -50,7 +44,6 @@ class SimplePSDCNN(nn.Module):
         # x_ctx: (B, 2K, L, M)
         # output: (B, K, L, 1)
         x = F.relu(self.conv1(x_ctx))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x)).squeeze(3)
-        x = self.conv4(x)
+        x = F.relu(self.conv2(x)).squeeze(2)
+        x = self.conv3(x)
         return x

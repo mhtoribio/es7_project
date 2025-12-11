@@ -4,7 +4,16 @@ SEADGE is a framework for data generation and evaluation metrics for testing per
 
 ## Installation
 
-TODO
+Create a virtual environment.
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+```
+
+Install the framework and its dependencies.
+```sh
+pip3 install git+https://github.com/mhtoribio/es7_project
+```
 
 ## Configuration
 

@@ -25,12 +25,13 @@ class PathsCfg(BaseModel):
     download_cache_dir: Path = Path("/tmp/seadge_download_cache")
     matfile_dir: Path = Path("/tmp/seadge_matfiles") # matfiles for ISCLP manually added here (TODO download in download subcommand)
     noise_dir: Path = Path("/tmp/seadge_noise") # Noise wav files manually added here
+    psd_model: Path = Path("/tmp/seadge_model/psdmodel.pt") # Trained PSD model saved here
 
-    @field_validator("output_dir", "clean_dir", "download_cache_dir", "matfile_dir", mode="before")
+    @field_validator("output_dir", "clean_dir", "download_cache_dir", "matfile_dir", "noise_dir", "psd_model", mode="before")
     @classmethod
     def _normalize_output_dir(cls, v: Any) -> Path:
         if v is None or (isinstance(v, str) and v.strip() == ""):
-            raise ValueError("output_dir clean_dir, download_cache_dir and matfile_dir must be set (non-empty).")
+            raise ValueError("output_dir clean_dir, download_cache_dir, matfile_dir, noise_dir and psd_model must be set (non-empty).")
         p = Path(v) if isinstance(v, (str, Path)) else v
         return p.expanduser().resolve()
 
