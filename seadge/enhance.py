@@ -66,7 +66,7 @@ def _enhance_one_file(
     y = load_wav(distant_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=2)
     s = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
 
-    e_vanilla, e_smooth_vanilla, e_dnn, e_smooth_dnn = isclp.enhance_isclp_kf(
+    e_vanilla, e_smooth_vanilla, e_dnn, e_smooth_dnn, e_oracle, e_smooth_oracle = isclp.enhance_isclp_kf(
         y = y,
         s = s,
         isclp_conf = isclp_conf,
@@ -80,6 +80,8 @@ def _enhance_one_file(
     write_wav(outdir / "isclp-kf-smooth" / f"{scen_hash}.wav", e_smooth_vanilla, fs=dspconf.enhancement_samplerate)
     write_wav(outdir / "deep-isclp-kf" / f"{scen_hash}.wav", e_dnn, fs=dspconf.enhancement_samplerate)
     write_wav(outdir / "deep-isclp-kf-smooth" / f"{scen_hash}.wav", e_smooth_dnn, fs=dspconf.enhancement_samplerate)
+    write_wav(outdir / "oracle-isclp-kf" / f"{scen_hash}.wav", e_oracle, fs=dspconf.enhancement_samplerate)
+    write_wav(outdir / "oracle-isclp-kf-smooth" / f"{scen_hash}.wav", e_smooth_oracle, fs=dspconf.enhancement_samplerate)
     # also write target and distant for metric computation
     write_wav(outdir / "target" / f"{scen_hash}.wav", s, fs=dspconf.enhancement_samplerate)
     write_wav(outdir / "distant" / f"{scen_hash}.wav", y[:,0], fs=dspconf.enhancement_samplerate) # mic 0 as ref mic

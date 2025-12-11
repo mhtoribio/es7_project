@@ -72,7 +72,7 @@ def _core_isclp(
     Psi_w_delta: list,
     Psi_w_tilde_init: list,
     beta_ISCLP_KF: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # init outputs
     q_STFT              = np.zeros((N_STFT_half, numFrames), dtype=np.complex128);
     e_prio_STFT         = np.zeros((N_STFT_half, numFrames), dtype=np.complex128);
@@ -161,6 +161,7 @@ def enhance_isclp_kf(
     y_STFT = stft(y, fs, axis=0)
     s_STFT = stft(s, fs, axis=0)
     y_STFT = np.swapaxes(y_STFT, 1, 2)
+    psd_true = np.abs(s_STFT) ** 2
 
     if debug_dir:
         np.save(debug_dir / "Gamma.npy", Gamma)
@@ -180,6 +181,7 @@ def enhance_isclp_kf(
 
     if debug_dir:
         spectrogram(phi_s_hat[:,:,0], scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_sqrtpsdretf.png", title=f"Target PSD estimate (SQRT-PSD-RETF)")
+        spectrogram(psd_true, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_truth.png", title=f"Target PSD estimate (Ground Truth)")
 
     #### ISCLP-KF
     numFrames = y_STFT.shape[1]
@@ -212,21 +214,40 @@ def enhance_isclp_kf(
         beta_ISCLP_KF=beta_ISCLP_KF,
     )
 
+    # ISCLP-KF with oracle PSD
+    _, _, e_post_oracle_STFT, e_post_oracle_smooth_STFT = _core_isclp(
+        N_STFT_half=N_STFT_half,
+        numFrames=numFrames,
+        A=A,
+        y_STFT=y_STFT,
+        H_hat_post_STFT=H_hat_post_STFT,
+        phi_s_hat=psd_true, # (freqbin x frame)
+        Psi_w_delta=Psi_w_delta,
+        Psi_w_tilde_init=Psi_w_tilde_init,
+        beta_ISCLP_KF=beta_ISCLP_KF,
+    )
+
     if debug_dir:
         spectrogram(e_post_vanilla_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_vanilla.png", title=f"e post ISCLP-KF, beta = 0")
         spectrogram(e_post_vanilla_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_vanilla_smooth.png", title=f"e post ISCLP-KF, beta = {beta_ISCLP_KF:2f}")
         spectrogram(e_post_dnn_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_dnn.png", title=f"e post Deep-ISCLP-KF, beta = 0")
         spectrogram(e_post_dnn_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_dnn_smooth.png", title=f"e post Deep-ISCLP-KF, beta = {beta_ISCLP_KF:2f}")
+        spectrogram(e_post_oracle_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle.png", title=f"e post ISCLP-KF (Oracle PSD), beta = 0")
+        spectrogram(e_post_oracle_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle_smooth.png", title=f"e post ISCLP-KF (Oracle PSD), beta = {beta_ISCLP_KF:2f}")
 
     e_post_vanilla_TD = istft(e_post_vanilla_STFT, fs)
     e_post_vanilla_smooth_TD = istft(e_post_vanilla_smooth_STFT, fs)
     e_post_dnn_TD = istft(e_post_dnn_STFT, fs)
     e_post_dnn_smooth_TD = istft(e_post_dnn_smooth_STFT, fs)
+    e_post_oracle_TD = istft(e_post_oracle_STFT, fs)
+    e_post_oracle_smooth_TD = istft(e_post_oracle_smooth_STFT, fs)
 
     if debug_dir:
         write_wav(debug_dir / "e_post_vanilla.wav", e_post_vanilla_TD, fs=fs)
         write_wav(debug_dir / "e_post_vanilla_smooth.wav", e_post_vanilla_smooth_TD, fs=fs)
         write_wav(debug_dir / "e_post_dnn.wav", e_post_dnn_TD, fs=fs)
         write_wav(debug_dir / "e_post_dnn_smooth.wav", e_post_dnn_smooth_TD, fs=fs)
+        write_wav(debug_dir / "e_post_oracle.wav", e_post_oracle_TD, fs=fs)
+        write_wav(debug_dir / "e_post_oracle_smooth.wav", e_post_oracle_smooth_TD, fs=fs)
 
-    return e_post_vanilla_TD, e_post_vanilla_smooth_TD, e_post_dnn_TD, e_post_dnn_smooth_TD
+    return e_post_vanilla_TD, e_post_vanilla_smooth_TD, e_post_dnn_TD, e_post_dnn_smooth_TD, e_post_oracle_TD, e_post_oracle_smooth_TD
