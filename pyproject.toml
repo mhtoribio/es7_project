@@ -26,6 +26,10 @@ dependencies = [
   "scikit-learn>=1.6",
   "pystoi>=0.4.1",
   "pesq>=0.0.4",
+  "speechmos>=0.0.1.1",
+  "librosa>=0.9.1",
+  "onnxruntime>=1.10.0",
+  "pandas",
 ]
 
 # optional URL field based on your setup.py

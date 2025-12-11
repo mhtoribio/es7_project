@@ -18,6 +18,7 @@ from functools import partial
 from multiprocessing import Pool
 from pystoi import stoi
 from pesq import pesq, PesqError
+from speechmos import dnsmos
 
 from seadge.utils import dsp
 from seadge.utils.log import log
@@ -37,8 +38,13 @@ def _metrics(
     results["stoi"] = stoi(target, distant, fs, extended=False)
     results["estoi"] = stoi(target, distant, fs, extended=True)
     p = pesq(fs, target, distant, 'wb', on_error=PesqError.RETURN_VALUES)
-    if p > 0:
+    if p > 0: # sometimes pesq cannot be evaluated due to not being able to find the utterances (because audio is so bad)
         results["pesq"] = p
+    dnsmos_result = dnsmos.run(distant, fs)
+    results["dnsmos_ovrl_mos"] = float(dnsmos_result["ovrl_mos"])
+    results["dnsmos_sig_mos"]  = float(dnsmos_result["sig_mos"])
+    results["dnsmos_bak_mos"]  = float(dnsmos_result["bak_mos"])
+    results["dnsmos_p808_mos"] = float(dnsmos_result["p808_mos"])
     return results
 
 def _metrics_for_one_scenario(
@@ -66,6 +72,11 @@ def _metrics_for_one_scenario(
         target = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = distant[:len(target)] # make distant same length as target. They have same offset from their RIRs.
+
+        # Simple peak normalization
+        target = (0.99 / (np.max(np.abs(target)) + 1e-12)) * target
+        distant = (0.99 / (np.max(np.abs(distant)) + 1e-12)) * distant
+
         results[algo] = _metrics(target, distant, dspconf.enhancement_samplerate)
         if debug_dir:
             X = dsp.stft(distant, dspconf.enhancement_samplerate)
