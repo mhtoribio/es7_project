@@ -73,7 +73,7 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
 
-    return features.astype(np.float32), psd.astype(np.float32)
+    return features.astype(np.float32, copy=False), psd.astype(np.float32, copy=False)
 
 
 def build_tensors_from_dir(npz_dir: Path, L_max: int, num_max_npz: int) -> tuple[torch.Tensor, torch.Tensor]:

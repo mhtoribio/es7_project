@@ -4,6 +4,7 @@ import random
 import math
 
 from seadge.utils.visualization import plot_room_topdown, plot_room_3d
+from seadge.utils import dsp
 from seadge.utils.log import log
 from seadge.utils.cache import make_pydantic_cache_key
 from seadge import config
@@ -172,7 +173,7 @@ def gen_one_source_loc(
     def _choose_y_given_x(x: float) -> Optional[float]:
         intervals = allowed_y_intervals_at_x(
             x, mic_positions=mic_xy, distance_min=mic_keepout,
-            clip=(ymin, ymax), strict=False
+            clip=(ymin, ymax), strict=False, eps=dsp.EPS
         )
         if not intervals:
             return None

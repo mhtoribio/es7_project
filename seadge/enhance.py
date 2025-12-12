@@ -63,8 +63,8 @@ def _enhance_one_file(
     )
 
     # Load distant and clean speech
-    y = load_wav(distant_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=2)
-    s = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
+    _, y = load_wav(distant_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=2)
+    _, s = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
 
     e_vanilla, e_smooth_vanilla, e_dnn, e_smooth_dnn, e_oracle, e_smooth_oracle = isclp.enhance_isclp_kf(
         y = y,

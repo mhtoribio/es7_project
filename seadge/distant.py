@@ -8,6 +8,7 @@ from multiprocessing import Pool
 import os
 
 from seadge import config
+from seadge.utils import dsp
 from seadge.utils.distant_sim import animate_rir_time, animate_freqresp, sim_distant_src
 from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
@@ -187,7 +188,7 @@ def simulate_one_scenario(
         y_gen[:x.shape[0],:] += x
 
     # Normalize output
-    y_gen = (0.99 / (np.max(np.abs(y_gen)) + 1e-12)) * y_gen
+    y_gen = (0.99 / (np.max(np.abs(y_gen)) + dsp.EPS)) * y_gen
 
     # Calculate values for ML
     path = ml_data_dir / f"{scen_hash}.npz"
@@ -195,8 +196,8 @@ def simulate_one_scenario(
     s_stft_enh = calc_s_stft_enh(early_src_ch, fs_datagen, fs_enhancement)
     log.debug(f"Saving PSD training data {path} ({y_stft_enh.shape=}, {s_stft_enh.shape=})")
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(path, Y=y_stft_enh.astype(np.complex64),
-                        S_early=s_stft_enh.astype(np.complex64))
+    np.savez_compressed(path, Y=y_stft_enh.astype(np.complex64, copy=False),
+                        S_early=s_stft_enh.astype(np.complex64, copy=False))
 
     return scen_hash, y_gen, early_src_ch[0]
 

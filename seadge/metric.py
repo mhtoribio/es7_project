@@ -69,13 +69,13 @@ def _metrics_for_one_scenario(
 
     for algo in algos:
         algo_enh_dir = enhanced_dir / algo
-        target = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
-        distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
+        _, target = load_wav(distant_dir / f"{scen_hash}_target.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
+        _, distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = distant[:len(target)] # make distant same length as target. They have same offset from their RIRs.
 
         # Simple peak normalization
-        target = (0.99 / (np.max(np.abs(target)) + 1e-12)) * target
-        distant = (0.99 / (np.max(np.abs(distant)) + 1e-12)) * distant
+        target = (0.99 / (np.max(np.abs(target)) + dsp.EPS)) * target
+        distant = (0.99 / (np.max(np.abs(distant)) + dsp.EPS)) * distant
 
         results[algo] = _metrics(target, distant, dspconf.enhancement_samplerate)
         if debug_dir:

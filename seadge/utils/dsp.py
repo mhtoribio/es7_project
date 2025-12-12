@@ -5,6 +5,8 @@ from scipy.signal import ShortTimeFFT, get_window
 
 from seadge import config
 
+EPS = 1e-12
+
 # Lazy loaded cache
 # STFT class
 _STFT : ShortTimeFFT | None = None

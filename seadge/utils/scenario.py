@@ -10,7 +10,7 @@ from scipy.signal import resample_poly
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from seadge import config
-from seadge.utils.wavfiles import wavfile_frames, wavfile_samplerate
+from seadge.utils.wavfiles import wavfile_frames, wavfile_samplerate, load_wav
 from seadge.utils.log import log
 
 
@@ -170,33 +170,28 @@ def delay_and_scale_source(output_len: int, x: np.ndarray, delay_samples: int, d
 
 def load_and_resample_source(source_spec: WavSource) -> np.ndarray:
     """
-    Loads, normalizes, and resamples source file according to spec.
+    Loads and resamples source file according to spec.
     Assumes the Scenario has already been validated.
     """
     cfg = config.get()
     abs_wav = (cfg.paths.clean_dir / source_spec.wav_path).expanduser().resolve()
-    fs, x = wavfile.read(abs_wav)
-    log.debug("Read wavfile %s with fs=%d and shape=%s", abs_wav, fs, getattr(x, "shape", None))
+    fs, x = load_wav(abs_wav, dtype=np.float64)
 
-    # Convert to float mono if needed
-    x = x.astype(np.float64, copy=False)
-    if x.ndim == 2 and x.shape[1] > 1:
-        x = np.mean(x, axis=1)
-
-    # Normalize peak
-    peak = float(np.max(np.abs(x))) if x.size else 1.0
-    if peak <= 0:
-        peak = 1.0
-    x_normalized = (0.99 / peak) * x
+    # Convert to mono if needed
+    if x.ndim == 2:
+        x = x[:, 0]
 
     decim = source_spec.decimation
     interp = source_spec.interpolation
-    x_resampled = resample_poly(x_normalized, interp, decim)
-    log.debug(
-        "Resampled with decimation=%d interpolation=%d from %d to %d (shape=%s)",
-        decim, interp, fs, fs * interp // decim, x_resampled.shape
-    )
-    return x_resampled.astype(np.float64, copy=False)
+    if decim != interp:
+        x_resampled = resample_poly(x, interp, decim)
+        log.debug(
+            "Resampled with decimation=%d interpolation=%d from %d to %d (shape=%s)",
+            decim, interp, fs, fs * interp // decim, x_resampled.shape
+        )
+        return x_resampled
+    else:
+        return x
 
 
 def prepare_source(source_spec: WavSource, output_len: int) -> tuple[np.ndarray, int]:
