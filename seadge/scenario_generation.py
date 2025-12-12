@@ -10,7 +10,7 @@ from functools import partial
 from multiprocessing import Pool
 import os
 
-from seadge.utils.scenario import Scenario, WavSource, load_and_resample_source
+from seadge.utils.scenario import Scenario, WavSource, load_and_resample_source, prepare_source
 from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
 from seadge.utils.wavfiles import wavfile_samplerate
@@ -171,7 +171,7 @@ def gen_one_scenario(
     )
     noise_power = segment_power(load_and_resample_source(tmp))
     target_power = segment_power(load_and_resample_source(target))
-    snr_db = rng.uniform(min_snr_db, max_snr_db)
+    snr_db = round(rng.uniform(min_snr_db, max_snr_db))
     noise_gain = gain_for_snr_db(target_power, noise_power, snr_db)
     noise_wavsource = WavSource(
         wav_path=_rel_wav_path(Path(noise_path), clean_base),
@@ -182,6 +182,14 @@ def gen_one_scenario(
         decimation=int(M),
         interpolation=int(L),
     )
+    # sanity check snr
+    #SNR = 10*log10(Pt / Pn)
+    noise_scaled, _ = prepare_source(noise_wavsource, int(scenario_duration))
+    scaled_noise_power = segment_power(noise_scaled)
+    snr_calc = 10 * np.log10(target_power/scaled_noise_power)
+    log.debug(f"{snr_db=}, {snr_calc=}")
+    if np.abs(snr_calc-snr_db) > 0.1: # 0.1 dB tolerance
+        log.warning(f"SNRs do not match after scaling noise source (desired={snr_db}, got={snr_calc})")
 
     # Assemble Scenario
     scen = Scenario(
