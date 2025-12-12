@@ -98,7 +98,7 @@ def _history(src):
     return getattr(src, "direction_history",
            getattr(src, "location_history", []))
 
-def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False):
+def get_all_rirs(room_cfg: config.RoomCfg, save_rir_plots=False):
     cfg = config.get()
 
     cache_root = cfg.paths.rir_cache_dir
@@ -112,40 +112,39 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
         if rir is None:
             rir = rir_for_pose(room_cfg, loc.location_m, loc.pattern, loc.azimuth_deg, loc.colatitude_deg)
 
-            # ---- optionally persist to disk (.npy + manifest) ----
-            if save_npy:
-                meta = {
-                    "fs": cfg.dsp.datagen_samplerate,
-                    "room": {
-                        "dimensions_m": tuple(room_cfg.dimensions_m),
-                        "rt60": float(room_cfg.rt60),
-                        "max_order": int(room_cfg.max_image_order),
-                        "mics": [tuple(p) for p in room_cfg.mic_pos],
-                    },
-                    "pose": {
-                        "loc": tuple(loc.location_m),
-                        "pattern": loc.pattern,
-                        "az_deg": float(loc.azimuth_deg),
-                        "col_deg": float(loc.colatitude_deg),
-                    },
-                    "src_index": int(i),
-                    "pose_index": int(j),
-                    "start_sample": int(loc.start_sample),
-                    "shape": tuple(rir.shape),
-                    "dtype": str(rir.dtype),
-                }
-                rir_path = save_rir(cache_root, key, rir, meta)
-                update_manifest(
-                    cache_root,
-                    key,
-                    rir_path,
-                    src_idx=i,
-                    pose_idx=j,
-                    start_sample=loc.start_sample,
-                    loc=loc,
-                    rir=rir,
-                    fs=cfg.dsp.datagen_samplerate,
-                )
+            # ---- persist to disk (.npy + manifest) ----
+            meta = {
+                "fs": cfg.dsp.datagen_samplerate,
+                "room": {
+                    "dimensions_m": tuple(room_cfg.dimensions_m),
+                    "rt60": float(room_cfg.rt60),
+                    "max_order": int(room_cfg.max_image_order),
+                    "mics": [tuple(p) for p in room_cfg.mic_pos],
+                },
+                "pose": {
+                    "loc": tuple(loc.location_m),
+                    "pattern": loc.pattern,
+                    "az_deg": float(loc.azimuth_deg),
+                    "col_deg": float(loc.colatitude_deg),
+                },
+                "src_index": int(i),
+                "pose_index": int(j),
+                "start_sample": int(loc.start_sample),
+                "shape": tuple(rir.shape),
+                "dtype": str(rir.dtype),
+            }
+            rir_path = save_rir(cache_root, key, rir, meta)
+            update_manifest(
+                cache_root,
+                key,
+                rir_path,
+                src_idx=i,
+                pose_idx=j,
+                start_sample=loc.start_sample,
+                loc=loc,
+                rir=rir,
+                fs=cfg.dsp.datagen_samplerate,
+            )
 
         # ---- optional plots ----
         if save_rir_plots:
@@ -168,7 +167,7 @@ def get_all_rirs(room_cfg: config.RoomCfg, save_npy=False, save_rir_plots=False)
 
 def _compute_rirs_for_room(room_file: Path, debug: bool):
     room = config.load_room(room_file)
-    get_all_rirs(room, save_npy=True, save_rir_plots=debug)
+    get_all_rirs(room, save_rir_plots=debug)
 
 def main():
     cfg = config.get()
