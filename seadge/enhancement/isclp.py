@@ -50,7 +50,8 @@ def _dnn_psd_estimation(y: np.ndarray):
     distant_mag, distant_phase = complex_to_mag_phase(y)
     # features: (2K, L, M)
     features = np.concatenate((distant_mag, distant_phase))
-    features = torch.as_tensor(features, dtype=torch.float32, device="cpu")
+    # features: (1, 2K, L, M)
+    features = torch.as_tensor(features[None, :, :, :], dtype=torch.float32, device="cpu")
 
     if not _model:
         log.error(f"Model not loaded. Error in code.")
