@@ -35,8 +35,8 @@ class WavSource(BaseModel):
 
     @model_validator(mode="after")
     def _basic_sanity(self) -> "WavSource":
-        if not (0.0 <= float(self.volume) <= 1.0):
-            raise ValueError(f"volume out of range [0,1]: {self.volume}")
+        if not (0.0 <= float(self.volume)):
+            raise ValueError(f"volume cannot be negative: {self.volume}")
         if self.sourceloc < 0:
             raise ValueError(f"sourceloc must be >= 0 (got {self.sourceloc})")
         if self.delay_samples < 0:
@@ -57,6 +57,7 @@ class Scenario(BaseModel):
     """
     room_id: str
     duration_samples: int
+    snr_db: float
     scenario_type: Optional[str] = None
     target_speaker: WavSource
     interferent_speakers: List[WavSource] = Field(default_factory=list)

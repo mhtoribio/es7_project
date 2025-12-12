@@ -206,8 +206,8 @@ class ScenarioGenCfg(BaseModel):
     scenario_duration_s: Annotated[float,  Field(gt=0)] = 5.0
     min_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
     max_interference_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
-    min_noise_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 0.1
-    max_noise_volume: Annotated[float, Field(ge=0.0, le=1.0)] = 1.0
+    min_snr_db: float = 10 # source-level SNR (based on clean wav files)
+    max_snr_db: float = 20 # source-level SNR (based on clean wav files)
     scenarios_per_room: Annotated[int, Field(gt=0)] = 5
 
     # optional

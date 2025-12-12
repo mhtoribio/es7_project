@@ -10,12 +10,12 @@ from functools import partial
 from multiprocessing import Pool
 import os
 
-from seadge.utils.scenario import Scenario, WavSource
+from seadge.utils.scenario import Scenario, WavSource, load_and_resample_source
 from seadge.utils.files import files_in_path_recursive
 from seadge.utils.log import log
 from seadge.utils.wavfiles import wavfile_samplerate
 from seadge.utils.cache import make_pydantic_cache_key
-from seadge.utils.dsp import resampling_values
+from seadge.utils.dsp import resampling_values, segment_power, gain_for_snr_db
 from seadge import config
 
 
@@ -38,8 +38,8 @@ def gen_one_scenario(
     scenario_duration_s: float,       # total timeline in samples (fs_target domain)
     min_interference_volume: float,
     max_interference_volume: float,
-    min_noise_volume: float,
-    max_noise_volume: float,
+    min_snr_db: float,
+    max_snr_db: float,
     num_speakers: int | None = None,  # default: len(room.sources)
     min_wavsource_duration_s: float | None = None,  # None -> equals scenario_duration
     rng: np.random.Generator | None = None,
@@ -152,39 +152,45 @@ def gen_one_scenario(
     others = [w for j, w in enumerate(wavsources) if j != target_idx]
 
     # Add noise sources
-    noise_wavsources: list[WavSource] = []
-    # Add all noise sources available. Choose by modifying noise path or noise dir contents
-    for path in noise_files:
-        try:
-            fs_from = int(wavfile_samplerate(path))
-        except Exception:
-            # If we can’t read header, fail scenario generation cleanly
-            return None
-
-        L, M = resampling_values(fs_from, fs_target)
-        dur = scenario_duration
-        delay = 0
-        volume = float(rng.uniform(min_noise_volume, max_noise_volume))
-        noise_wavsources.append(
-            WavSource(
-                wav_path=_rel_wav_path(Path(path), clean_base),
-                volume=volume,
-                sourceloc=0,
-                delay_samples=int(delay),
-                duration_samples=int(dur),
-                decimation=int(M),
-                interpolation=int(L),
-            )
-        )
+    noise_path = rng.choice(noise_files)
+    try:
+        fs_from = int(wavfile_samplerate(noise_path))
+    except:
+        return None
+    L, M = resampling_values(fs_from, fs_target)
+    dur = scenario_duration
+    delay = 0
+    tmp = WavSource(
+        wav_path=_rel_wav_path(Path(noise_path), clean_base),
+        volume=1.0,
+        sourceloc=0,
+        delay_samples=int(delay),
+        duration_samples=int(dur),
+        decimation=int(M),
+        interpolation=int(L),
+    )
+    noise_power = segment_power(load_and_resample_source(tmp))
+    target_power = segment_power(load_and_resample_source(target))
+    snr_db = rng.uniform(min_snr_db, max_snr_db)
+    noise_gain = gain_for_snr_db(target_power, noise_power, snr_db)
+    noise_wavsource = WavSource(
+        wav_path=_rel_wav_path(Path(noise_path), clean_base),
+        volume=noise_gain,
+        sourceloc=0,
+        delay_samples=int(delay),
+        duration_samples=int(dur),
+        decimation=int(M),
+        interpolation=int(L),
+    )
 
     # Assemble Scenario
     scen = Scenario(
-        scenario_type="speaker_mixture",
         room_id=room_hash,
         duration_samples=int(scenario_duration),
+        snr_db=snr_db,
         target_speaker=target,
         interferent_speakers=others,
-        noise_sources=noise_wavsources,
+        noise_sources=[noise_wavsource],
     )
 
     # Pydantic validation will run here; if it fails, return None
@@ -226,8 +232,8 @@ def _gen_scenarios_for_room(
             scenario_duration_s=scengen_cfg.scenario_duration_s,
             min_interference_volume=scengen_cfg.min_interference_volume,
             max_interference_volume=scengen_cfg.max_interference_volume,
-            min_noise_volume=scengen_cfg.min_noise_volume,
-            max_noise_volume=scengen_cfg.max_noise_volume,
+            min_snr_db=scengen_cfg.min_snr_db,
+            max_snr_db=scengen_cfg.max_snr_db,
             num_speakers=scengen_cfg.num_speakers,
             min_wavsource_duration_s=scengen_cfg.effective_min_wavsource_duration_s,
         )

@@ -88,3 +88,19 @@ def db2pow(x):
 
 def db2mag(x):
     return 10**(x/20)
+
+def segment_power(x: np.ndarray) -> float:
+    """Mean-square power of a 1D (float) segment."""
+    x = np.asarray(x, dtype=float)
+    if x.size == 0:
+        return 0.0
+    return float(np.mean(x * x))
+
+def gain_for_snr_db(P_target: float, P_noise_pre: float, snr_db_desired: float) -> float:
+    """Return scalar gain for noise to achieve SNR(dB) relative to target.
+    SNR = 10*log10(Pt / Pn)."""
+    # Guard against silence
+    P_target = max(P_target, EPS)
+    P_noise_pre = max(P_noise_pre, EPS)
+    Pn_target = P_target / db2pow(snr_db_desired)
+    return float(np.sqrt(Pn_target / P_noise_pre))
