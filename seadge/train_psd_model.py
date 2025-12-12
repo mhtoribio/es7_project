@@ -16,7 +16,7 @@ from tqdm import tqdm
 from seadge.utils.log import log
 from seadge.utils.psd_data_loader import load_tensors_cache
 from seadge.utils.visualization import spectrogram
-from seadge.models.psd_cnn import SimplePSDCNN
+from seadge.models.psd_cnn_gru import PSD_CNN_GRU as psd_model
 from seadge import config
 from seadge.utils.log import setup_logger
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
@@ -263,7 +263,7 @@ def main():
     num_mics = x_tensor.shape[3]
 
     # Initialize model
-    model = SimplePSDCNN(num_freqbins=num_freqbins, num_mics=num_mics).to(device)
+    model = psd_model(num_freqbins=num_freqbins, num_mics=num_mics).to(device)
 
     # Wrap with DDP if distributed
     if use_ddp:

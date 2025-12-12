@@ -17,7 +17,7 @@ from seadge.utils.isclp_helpers.estim_corrmat import estim_corrmat
 from seadge.utils.isclp_helpers.estim_psd_retf import estim_psd_retf
 from seadge.utils.isclp_helpers.isclp_kf import ISCLP
 
-from seadge.models.psd_cnn import SimplePSDCNN
+from seadge.models.psd_cnn_gru import PSD_CNN_GRU as psd_model
 
 @dataclass
 class ISCLPConfig:
@@ -42,7 +42,7 @@ _model = None
 def _load_psd_model(modelpath: Path, num_freqbins: int, num_mics: int):
     global _model
     log.debug(f"Loading PSD CNN model from {modelpath}")
-    _model = SimplePSDCNN(num_freqbins=num_freqbins, num_mics=num_mics)
+    _model = psd_model(num_freqbins=num_freqbins, num_mics=num_mics)
     _saved_model = torch.load(modelpath, map_location='cpu')
     _model.load_state_dict(_saved_model)
 
