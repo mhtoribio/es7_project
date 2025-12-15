@@ -9,6 +9,7 @@ import torch.distributed as dist
 import torch.utils.data.distributed
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+import csv
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -309,6 +310,13 @@ def main():
 
         # Plot training losses
         if train_losses:  # can be empty if resumed late
+            outdatapath = cfg.paths.debug_dir / "cnn" / "train_loss.csv"
+            log.debug(f"Writing training loss data to {outdatapath}")
+            with outdatapath.open("w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["epoch", "Train loss"])
+                for i, tl in enumerate(train_losses):
+                    w.writerow([i, tl])
             plt.figure(figsize=(8, 5))
             plt.plot(train_losses, label="Training Loss")
             plt.xlabel("Epoch")
