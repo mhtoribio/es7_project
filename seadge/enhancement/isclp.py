@@ -39,10 +39,11 @@ class ISCLPConfig:
     retf_thres_db : float # RETF update threshold
 
 _model = None
+_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def _load_psd_model(modelpath: Path, num_freqbins: int, num_mics: int):
     global _model
     log.debug(f"Loading PSD CNN model from {modelpath}")
-    _model = psd_model(num_freqbins=num_freqbins, num_mics=num_mics)
+    _model = psd_model(num_freqbins=num_freqbins, num_mics=num_mics).to(_device)
     _saved_model = torch.load(modelpath, map_location='cpu')
     _model.load_state_dict(_saved_model)
 
@@ -51,7 +52,7 @@ def _dnn_psd_estimation(y: np.ndarray):
     # features: (2K, L, M)
     features = np.concatenate((distant_mag, distant_phase))
     # features: (1, 2K, L, M)
-    features = torch.as_tensor(features[None, :, :, :], dtype=torch.float32, device="cpu")
+    features = torch.as_tensor(features[None, :, :, :], dtype=torch.float32, device=_device)
 
     if not _model:
         log.error(f"Model not loaded. Error in code.")
@@ -61,7 +62,7 @@ def _dnn_psd_estimation(y: np.ndarray):
         y_pred_log = _model(features)
         y_pred = torch.expm1(y_pred_log)
 
-    return y_pred.squeeze(0).numpy()
+    return y_pred.squeeze(0).cpu().numpy()
 
 def _core_isclp(
     N_STFT_half: int,
