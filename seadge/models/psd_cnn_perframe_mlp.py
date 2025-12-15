@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from seadge.utils.log import log
 
-class SimplePSDCNN(nn.Module):
+class PSD_CNN_FC(nn.Module):
     def __init__(self, num_freqbins, num_mics):
         super().__init__()
         self.num_freqbins = num_freqbins
@@ -41,6 +41,12 @@ class SimplePSDCNN(nn.Module):
 
         self.per_frame_mlp = nn.Sequential(
             nn.Linear(mlp_in_features, hidden_mlp),
+            nn.ReLU(),
+            nn.Linear(hidden_mlp, hidden_mlp),
+            nn.ReLU(),
+            nn.Linear(hidden_mlp, hidden_mlp),
+            nn.ReLU(),
+            nn.Linear(hidden_mlp, hidden_mlp),
             nn.ReLU(),
             nn.Linear(hidden_mlp, c_out),   # output K per frame
         )

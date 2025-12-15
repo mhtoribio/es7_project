@@ -17,7 +17,7 @@ from seadge.utils.isclp_helpers.estim_corrmat import estim_corrmat
 from seadge.utils.isclp_helpers.estim_psd_retf import estim_psd_retf
 from seadge.utils.isclp_helpers.isclp_kf import ISCLP
 
-from seadge.models.psd_cnn import SimplePSDCNN as psd_model
+from seadge.models.psd_cnn import PSD_CNN_FC as psd_model
 
 @dataclass
 class ISCLPConfig:
