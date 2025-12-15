@@ -95,10 +95,11 @@ def enhance_scenarios(
     debug_dir: Path | None,
     dspconf: config.DspCfg,
     psdmodel_path: Path,
+    max_scenarios: int | None,
 ):
     slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
     num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
-    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json"))
+    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json", maxnum=max_scenarios))
     log.info(f"Enhancing {len(scenario_files)} scenarios with {num_processes} workers")
 
     worker_fn = partial(
@@ -130,4 +131,5 @@ def main():
         debug_dir=cfg.paths.debug_dir if cfg.debug else None,
         dspconf=cfg.dsp,
         psdmodel_path=cfg.paths.psd_model,
+        max_scenarios=cfg.scenarios,
     )

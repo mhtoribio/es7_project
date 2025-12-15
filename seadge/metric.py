@@ -141,6 +141,7 @@ def compute_all_metrics(
     enhanced_dir: Path,
     debug_dir: Path | None,
     dspconf: config.DspCfg,
+    max_scenarios: int | None,
 ):
     if debug_dir:
         debug_dir.mkdir(exist_ok=True)
@@ -154,7 +155,7 @@ def compute_all_metrics(
 
     slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
     num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
-    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json"))
+    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json", maxnum=max_scenarios))
     log.info(f"Computing metrics for {len(scenario_files)} scenarios with {num_processes} workers")
 
     worker_fn = partial(
@@ -190,4 +191,5 @@ def main():
         enhanced_dir=cfg.paths.enhanced_dir,
         debug_dir=cfg.paths.debug_dir/"metric" if cfg.debug else None,
         dspconf=cfg.dsp,
+        max_scenarios=cfg.scenarios,
     )

@@ -251,10 +251,11 @@ def simulate_scenarios(
     normalize: str | None,
     early_tmax_ms: float,
     early_offset_ms: float,
+    max_scenarios: int | None,
 ):
     slurm_cpus = os.getenv("SLURM_CPUS_PER_TASK")
     num_processes = int(slurm_cpus) if slurm_cpus else os.cpu_count()
-    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json"))
+    scenario_files = list(files_in_path_recursive(scenario_dir, "*.scenario.json", maxnum=max_scenarios))
     log.info(f"Simulating {len(scenario_files)} scenarios with {num_processes} workers")
     outpath.mkdir(parents=True, exist_ok=True)
 
@@ -305,4 +306,5 @@ def main():
         normalize=cfg.dsp.rirconv_normalize,
         early_tmax_ms=cfg.dsp.early_tmax_ms,
         early_offset_ms=cfg.dsp.early_offset_ms,
+        max_scenarios=cfg.scenarios,
     )

@@ -268,6 +268,7 @@ class Config(BaseSettings):
     debug: bool = Field(default=False)
     clean_zip_files: int = Field(default=1)
     deeplearning: LearningCfg = Field(default_factory=LearningCfg)
+    scenarios: Optional[int] = Field(default=None) # optional max number of scenarios to use in a given step (for example enhancement)
 
     # ---- Derived property: L_max for STFT frames ----
     @property

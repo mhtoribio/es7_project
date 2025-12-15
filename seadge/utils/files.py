@@ -1,9 +1,10 @@
 import fnmatch
+from typing import Optional
 from pathlib import Path
 
 from seadge.utils.log import log
 
-def files_in_path_recursive(path: Path, glob: str) -> list[Path]:
+def files_in_path_recursive(path: Path, glob: str, maxnum: Optional[int] = None) -> list[Path]:
     """
     Returns a list of Path objects of wav files in a path (recursive dir search or single file).
 
@@ -45,5 +46,10 @@ def files_in_path_recursive(path: Path, glob: str) -> list[Path]:
         return []
 
     results.sort(key=lambda x: str(x).lower())
-    log.debug(f"Found {len(results)} files recursively with pattern {glob} in directory {path}")
+    if maxnum:
+        num = min(maxnum, len(results))
+        results = results[:num]
+        log.debug(f"Found {len(results)} (using {num}) files recursively with pattern {glob} in directory {path}")
+    else:
+        log.debug(f"Found {len(results)} files recursively with pattern {glob} in directory {path}")
     return results
