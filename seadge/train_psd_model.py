@@ -16,7 +16,7 @@ from tqdm import tqdm
 from seadge.utils.log import log
 from seadge.utils.psd_data_loader import load_tensors_cache
 from seadge.utils.visualization import spectrogram
-from seadge.models.psd_cnn import PSD_CNN_FC as psd_model
+from seadge.models.psd_cnn_perframe_mlp import PSD_CNN_FC as psd_model
 from seadge import config
 from seadge.utils.log import setup_logger
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
