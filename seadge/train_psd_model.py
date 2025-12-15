@@ -311,6 +311,7 @@ def main():
         # Plot training losses
         if train_losses:  # can be empty if resumed late
             outdatapath = cfg.paths.debug_dir / "cnn" / "train_loss.csv"
+            outdatapath.parent.mkdir(exist_ok=True)
             log.debug(f"Writing training loss data to {outdatapath}")
             with outdatapath.open("w", newline="") as f:
                 w = csv.writer(f)
@@ -325,6 +326,7 @@ def main():
             plt.grid(True)
             plt.legend()
             outfigpath = cfg.paths.debug_dir / "cnn" / "train_loss.png"
+            outfigpath.parent.mkdir(exist_ok=True)
             outfigpath.parent.mkdir(parents=True, exist_ok=True)
             log.debug(f"Writing training loss figure to {outfigpath}")
             plt.savefig(outfigpath)
