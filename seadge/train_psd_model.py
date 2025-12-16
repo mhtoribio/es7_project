@@ -280,7 +280,7 @@ def main():
             f"device={device}, world_size={world_size}"
         )
 
-        log.debug(f"Quantile {torch.quantile(y_tensor[0, :, :], 0.995)=}, {torch.quantile(y_tensor[0, :, :], 0.9)=}")
+        log.debug(f"Label stats {torch.quantile(y_tensor[0, :, :], 0.995)=}, {torch.quantile(y_tensor[0, :, :], 0.9)=}, {torch.min(y_tensor[0, :, :])=}, {torch.max(y_tensor[0, :, :])=}")
 
     # Train & evaluate
     train_losses, test_loss = train_psd_model(
