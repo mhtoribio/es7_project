@@ -37,5 +37,5 @@ class SimplePSDCNN(nn.Module):
         x = F.relu(self.conv1(x_ctx))
         x = F.relu(self.conv2(x)).squeeze(-1)
         x = self.conv3(x)
-        x = F.sigmoid(x)
+        x = torch.clamp(x, 0.0, 2)
         return x
