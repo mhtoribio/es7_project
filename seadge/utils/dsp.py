@@ -80,6 +80,9 @@ def resampling_values(fs_from: int, fs_to: int) -> tuple[int, int]:
     g = math.gcd(fs_from, fs_to)
     return (fs_to // g, fs_from // g)
 
+def complex_to_re_im(x):
+    return np.real(x), np.imag(x)
+
 def complex_to_mag_phase(x):
     return np.abs(x), np.angle(x)
 

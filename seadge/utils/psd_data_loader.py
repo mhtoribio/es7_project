@@ -10,7 +10,7 @@ import json
 
 from seadge.utils.log import log
 from seadge.utils.files import files_in_path_recursive
-from seadge.utils.dsp import complex_to_mag_phase
+from seadge.utils.dsp import complex_to_re_im
 
 def load_features_and_psd(npz_file: Path, L_max: int) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -66,9 +66,11 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     distant, early = load_features_and_psd(npz_file, L_max)
 
     # distant: (K, L, M)
-    distant_mag, distant_phase = complex_to_mag_phase(distant)
+    re, im = complex_to_re_im(distant)
+    log_re = torch.log1p(re)
+    log_im = torch.log1p(im)
     # features: (2K, L, M)
-    features = np.concatenate((distant_mag, distant_phase))
+    features = np.concatenate((log_re, log_im))
 
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
