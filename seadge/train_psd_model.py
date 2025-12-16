@@ -22,7 +22,7 @@ from seadge.utils.log import setup_logger
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
 from seadge.models import loss_functions
 
-from seadge.models.psd_cnn_groups import SimplePSDCNN as psd_model
+from seadge.models.psd_cnn import SimplePSDCNN as psd_model
 
 # ugly hack but it works
 import argparse
