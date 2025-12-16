@@ -37,5 +37,6 @@ class SimplePSDCNN(nn.Module):
         x = F.relu(self.conv1(x_ctx))
         x = F.relu(self.conv2(x)).squeeze(-1)
         x = self.conv3(x)
-        x = torch.clamp(x, 0.0, 2)
+        max_output_val = 2
+        x = 0.5 * max_output_val * (torch.tanh(x / max_output_val) + 1.0)
         return x
