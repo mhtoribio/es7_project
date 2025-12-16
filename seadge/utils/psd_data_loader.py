@@ -67,10 +67,8 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
 
     # distant: (K, L, M)
     re, im = complex_to_re_im(distant)
-    log_re = torch.log1p(re)
-    log_im = torch.log1p(im)
     # features: (2K, L, M)
-    features = np.concatenate((log_re, log_im))
+    features = np.concatenate((re, im))
 
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
