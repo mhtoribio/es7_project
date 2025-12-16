@@ -33,6 +33,12 @@ class SimplePSDCNN(nn.Module):
         )
         self.conv4 = nn.Conv1d(
             in_channels=c_hidden,
+            out_channels=c_hidden,
+            kernel_size=3,
+            padding=1,
+        )
+        self.conv5 = nn.Conv1d(
+            in_channels=c_hidden,
             out_channels=c_out,
             kernel_size=1,
         )
@@ -44,5 +50,6 @@ class SimplePSDCNN(nn.Module):
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x)).squeeze(-1)
         x = self.conv4(x)
+        x = self.conv5(x)
         x = torch.sigmoid(x)
         return x
