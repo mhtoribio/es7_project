@@ -280,6 +280,8 @@ def main():
             f"device={device}, world_size={world_size}"
         )
 
+        log.debug(f"Quantile {torch.quantile(y_tensor, 0.995)=}, {torch.quantile(y_tensor, 0.9)=}")
+
     # Train & evaluate
     train_losses, test_loss = train_psd_model(
         model=model,
