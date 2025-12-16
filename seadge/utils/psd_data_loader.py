@@ -35,9 +35,9 @@ def load_features_and_psd(npz_file: Path, L_max: int) -> tuple[np.ndarray, np.nd
 
     # zero-pad frames
     Y = np.zeros((freqbins, L_max, mics), dtype=np.complex64)
-    Y[:, :frames, :] = Y_np
+    Y[:, :min(frames, Y_np.shape[1]), :] = Y_np
     S = np.zeros((freqbins, L_max), dtype=np.complex64)
-    S[:, :frames] = S_np
+    S[:, :min(frames, S_np.shape[1])] = S_np
 
     # (K, L, M), (K, L)
     return Y, S
