@@ -233,41 +233,6 @@ def enhance_isclp_kf(
         beta_ISCLP_KF=beta_ISCLP_KF,
     )
 
-    # ISCLP-KF-error
-    rng = np.random.default_rng(3)
-    psd_error = np.abs(rng.normal(0, 0.05, size=psd_true.shape))
-    psd_with_error = psd_error + psd_true
-    if debug_dir:
-        spectrogram(psd_with_error, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_err.png", title=f"Oracle PSD with error")
-    _, _, e_post_err_STFT, e_post_err_smooth_STFT = _core_isclp(
-        N_STFT_half=N_STFT_half,
-        numFrames=numFrames,
-        A=A,
-        y_STFT=y_STFT,
-        H_hat_post_STFT=H_hat_post_STFT.copy(),
-        phi_s_hat=psd_with_error, # (freqbin x frame)
-        Psi_w_delta=Psi_w_delta,
-        Psi_w_tilde_init=Psi_w_tilde_init,
-        beta_ISCLP_KF=beta_ISCLP_KF,
-    )
-
-    # ISCLP-KF-lincomb
-    a = 0.02
-    psd_with_lincomb_error = (1-a)*psd_true + a*phi_dnn
-    if debug_dir:
-        spectrogram(psd_with_lincomb_error, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_lincomberr.png", title=f"Oracle PSD with lincomb error")
-    _, _, e_post_lincomberr_STFT, e_post_lincomberr_smooth_STFT = _core_isclp(
-        N_STFT_half=N_STFT_half,
-        numFrames=numFrames,
-        A=A,
-        y_STFT=y_STFT,
-        H_hat_post_STFT=H_hat_post_STFT.copy(),
-        phi_s_hat=psd_with_lincomb_error, # (freqbin x frame)
-        Psi_w_delta=Psi_w_delta,
-        Psi_w_tilde_init=Psi_w_tilde_init,
-        beta_ISCLP_KF=beta_ISCLP_KF,
-    )
-
     if debug_dir:
         spectrogram(e_post_vanilla_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_vanilla.png", title=f"e post ISCLP-KF, beta = 0")
         spectrogram(e_post_vanilla_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_vanilla_smooth.png", title=f"e post ISCLP-KF, beta = {beta_ISCLP_KF:2f}")
@@ -275,10 +240,6 @@ def enhance_isclp_kf(
         spectrogram(e_post_dnn_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_dnn_smooth.png", title=f"e post Deep-ISCLP-KF, beta = {beta_ISCLP_KF:2f}")
         spectrogram(e_post_oracle_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle.png", title=f"e post ISCLP-KF (Oracle PSD), beta = 0")
         spectrogram(e_post_oracle_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle_smooth.png", title=f"e post ISCLP-KF (Oracle PSD), beta = {beta_ISCLP_KF:2f}")
-        spectrogram(e_post_err_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_err.png", title=f"e post ISCLP-KF (Oracle PSD with error), beta = 0")
-        spectrogram(e_post_err_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_err_smooth.png", title=f"e post ISCLP-KF (Oracle PSD with error), beta = {beta_ISCLP_KF:2f}")
-        spectrogram(e_post_lincomberr_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_lincomberr.png", title=f"e post ISCLP-KF (Oracle PSD with lincomberror), beta = 0")
-        spectrogram(e_post_lincomberr_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_lincomberr_smooth.png", title=f"e post ISCLP-KF (Oracle PSD with lincomberror), beta = {beta_ISCLP_KF:2f}")
 
     e_post_vanilla_TD = istft(e_post_vanilla_STFT, fs)
     e_post_vanilla_smooth_TD = istft(e_post_vanilla_smooth_STFT, fs)
@@ -286,6 +247,14 @@ def enhance_isclp_kf(
     e_post_dnn_smooth_TD = istft(e_post_dnn_smooth_STFT, fs)
     e_post_oracle_TD = istft(e_post_oracle_STFT, fs)
     e_post_oracle_smooth_TD = istft(e_post_oracle_smooth_STFT, fs)
+
+    # normalize all
+    e_post_vanilla_TD = e_post_vanilla_TD / np.max(np.abs(e_post_vanilla_TD))
+    e_post_vanilla_smooth_TD = e_post_vanilla_smooth_TD / np.max(np.abs(e_post_vanilla_smooth_TD))
+    e_post_dnn_TD = e_post_dnn_TD / np.max(np.abs(e_post_dnn_TD))
+    e_post_dnn_smooth_TD = e_post_dnn_smooth_TD / np.max(np.abs(e_post_dnn_smooth_TD))
+    e_post_oracle_TD = e_post_oracle_TD / np.max(np.abs(e_post_oracle_TD))
+    e_post_oracle_smooth_TD = e_post_oracle_smooth_TD / np.max(np.abs(e_post_oracle_smooth_TD))
 
     if debug_dir:
         write_wav(debug_dir / "e_post_vanilla.wav", e_post_vanilla_TD, fs=fs)
