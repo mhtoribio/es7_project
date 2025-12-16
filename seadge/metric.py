@@ -73,11 +73,6 @@ def _metrics_for_one_scenario(
         _, distant = load_wav(algo_enh_dir / f"{scen_hash}.wav", expected_fs=dspconf.enhancement_samplerate, expected_ndim=1)
         distant = distant[:len(target)] # make distant same length as target. They have same offset from their RIRs.
 
-        # Simple peak normalization
-        target = (0.99 / (np.max(np.abs(target)) + dsp.EPS)) * target
-        distant = (0.99 / (np.max(np.abs(distant)) + dsp.EPS)) * distant
-
-        results[algo] = _metrics(target, distant, dspconf.enhancement_samplerate)
         if debug_dir:
             X = dsp.stft(distant, dspconf.enhancement_samplerate)
             if algo == "target":
@@ -86,7 +81,13 @@ def _metrics_for_one_scenario(
                 title = "Distant Noisy Speech"
             else:
                 title = f"Enhanced Speech ({algo})"
-            spectrogram(X, debug_dir/f"{scen_hash}_{algo}.png", title=title, x_tick_prop=dspconf.x_tick_prop, y_tick_prop=dspconf.y_tick_prop, c_range=dspconf.c_range)
+            spectrogram(X, debug_dir/f"{scen_hash}_{algo}.png", scale='mag', title=title, x_tick_prop=dspconf.x_tick_prop, y_tick_prop=dspconf.y_tick_prop, c_range=dspconf.c_range)
+
+        # Simple peak normalization
+        target = (0.99 / (np.max(np.abs(target)) + dsp.EPS)) * target
+        distant = (0.99 / (np.max(np.abs(distant)) + dsp.EPS)) * distant
+
+        results[algo] = _metrics(target, distant, dspconf.enhancement_samplerate)
 
     if debug_dir:
         import json

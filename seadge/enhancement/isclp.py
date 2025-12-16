@@ -17,7 +17,7 @@ from seadge.utils.isclp_helpers.estim_corrmat import estim_corrmat
 from seadge.utils.isclp_helpers.estim_psd_retf import estim_psd_retf
 from seadge.utils.isclp_helpers.isclp_kf import ISCLP
 
-from seadge.models.psd_cnn import SimplePSDCNN as psd_model
+from seadge.models.psd_cnn_groups import SimplePSDCNN as psd_model
 
 @dataclass
 class ISCLPConfig:
@@ -107,6 +107,9 @@ def enhance_isclp_kf(
         alpha_file: Path,
         modelpath: Path,
         ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+
+    log.debug(f"enhance_isclp_kf {isclp_conf=}, {debug_dir=}, {lap_div_file=}, {alpha_file=}, {modelpath=}")
+
     if debug_dir:
         debug_dir.mkdir(exist_ok=True, parents=True)
     # Initialization / Params

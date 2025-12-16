@@ -6,7 +6,7 @@ clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
 matfile_dir = "~/uni/p7/ISCLP-KF/param/SQRT_PSD_RETF"
 noise_dir = "~/uni/es7_project/audio/clean_noise/used"
-psd_model = "~/uni/p7/models/cnn_gru/model.pt"
+psd_model = "~/uni/p7/models/cnn_finalfinal_100epochs/model.pt"
 
 [dsp]
 datagen_samplerate = 48000
@@ -29,15 +29,17 @@ min_num_source_locations = 1
 max_num_source_locations = 1
 # Minimum distances from sources to wall and mic
 # Be careful choosing these values since they (along with room dimensions) also determine "spread" of sources in the room
-min_source_distance_to_wall_m = 1.0
+min_source_distance_to_wall_m = 0.7
 min_source_distance_to_mic_m = 2.0
 min_source_inter_spacing = 0.4
-max_source_movement_m = 1.0
+max_source_movement_m = 0.2
 max_azimuth_rotation_deg = 90.0
+max_movement_steps = 4
+min_movement_step_duration = 96000 # value in samples
 
 # mic array
 num_mics = 5
-mic_spacing = 0.05
+mic_spacing = 0.08
 mic_y = 0.05
 mic_z = 1.2
 
@@ -45,6 +47,6 @@ mic_z = 1.2
 scenario_duration_s = 10.0
 min_interference_volume = 0.1
 max_interference_volume = 0.5
-min_snr_db = 10
-max_snr_db = 20
+min_snr_db = 15
+max_snr_db = 15
 scenarios_per_room = 2

@@ -22,7 +22,7 @@ from seadge.utils.log import setup_logger
 from seadge.utils.torch_ddp import setup_distributed, cleanup_distributed, launch_ddp
 from seadge.models import loss_functions
 
-from seadge.models.psd_cnn import SimplePSDCNN as psd_model
+from seadge.models.psd_cnn_groups import SimplePSDCNN as psd_model
 
 # ugly hack but it works
 import argparse
@@ -346,13 +346,19 @@ def main():
             y_pred.squeeze(0).cpu().numpy(),
             cfg.paths.debug_dir / "cnn" / "psd_pred.png",
             title="PSD pred",
-            scale="mag",
+            scale="pow",
         )
         spectrogram(
             y_true.squeeze(0).cpu().numpy(),
             cfg.paths.debug_dir / "cnn" / "psd_truth.png",
             title="PSD ground truth",
-            scale="mag",
+            scale="pow",
+        )
+        spectrogram(
+            x_sample.cpu().numpy()[0, :num_freqbins, :, 0],
+            cfg.paths.debug_dir / "cnn" / "distant_mag.png",
+            title="Distant Mag",
+            scale="mag"
         )
 
     cleanup_distributed()
