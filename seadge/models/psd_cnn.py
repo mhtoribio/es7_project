@@ -22,8 +22,8 @@ class SimplePSDCNN(nn.Module):
         self.conv2 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
-            kernel_size=(3, 3),   # frames x mic
-            padding=(1, 0),
+            kernel_size=(5, 3),   # frames x mic
+            padding=(2, 0),
         )
         self.conv3 = nn.Conv2d(
             in_channels=c_hidden,
