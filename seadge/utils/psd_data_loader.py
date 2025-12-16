@@ -68,10 +68,9 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     # distant: (K, L, M)
     #re, im = complex_to_re_im(distant)
     mag = complex_to_mag_phase(distant)
-    logmag = np.log1p(mag)
     # features: (2K, L, M)
     #features = np.concatenate((re, im))
-    features = logmag
+    features = mag
 
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
@@ -147,6 +146,7 @@ def load_tensors_cache(cache_dir: Path) -> tuple[torch.Tensor, torch.Tensor, int
     d = Path(cache_dir)
     X_mm = np.load(d / "X.npy", mmap_mode="c")  # (N, 2K, L, M), float32
     Y_mm = np.load(d / "Y.npy", mmap_mode="c")  # (N, K, L[,...]), float32
+    log.debug(f"{X_mm.shape=}, {Y_mm.shape=}")
     L_max = int(json.loads((d / "meta.json").read_text())["L_max"])
     return torch.from_numpy(X_mm), torch.from_numpy(Y_mm), L_max
 
