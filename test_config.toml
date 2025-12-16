@@ -6,7 +6,8 @@ clean_dir = "~/shit/seadge_clean_data"
 output_dir = "~/shit/seadge_output"
 matfile_dir = "~/uni/p7/ISCLP-KF/param/SQRT_PSD_RETF"
 noise_dir = "~/uni/es7_project/audio/clean_noise/used"
-psd_model = "~/uni/p7/models/psd_cnn_nonoise/model.pt"
+#psd_model = "~/uni/p7/models/psd_cnn_nonoise/model.pt"
+psd_model = "~/uni/p7/down/model.pt"
 
 [dsp]
 datagen_samplerate = 48000

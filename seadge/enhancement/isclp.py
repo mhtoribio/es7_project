@@ -47,10 +47,12 @@ def _load_psd_model(modelpath: Path, num_freqbins: int, num_mics: int):
     _model.load_state_dict(_saved_model)
 
 def _dnn_psd_estimation(y: np.ndarray):
-    distant_mag, distant_phase = complex_to_mag_phase(y)
+    #distant_mag, distant_phase = complex_to_mag_phase(y)
     # features: (2K, L, M)
-    features = np.concatenate((distant_mag, distant_phase))
+    #features = np.concatenate((distant_mag, distant_phase))
     # features: (1, 2K, L, M)
+    mag, _ = complex_to_mag_phase(y)
+    features = mag
     features = torch.as_tensor(features[None, :, :, :], dtype=torch.float32, device="cpu")
 
     if not _model:
@@ -61,7 +63,7 @@ def _dnn_psd_estimation(y: np.ndarray):
         y_pred_log = _model(features)
         y_pred = torch.expm1(y_pred_log)
 
-    log.debug(f"{features.shape=}, {y.shape=}, {distant_mag.shape=}, {distant_phase.shape=}, {y_pred.shape=}")
+    #log.debug(f"{features.shape=}, {y.shape=}, {distant_mag.shape=}, {distant_phase.shape=}, {y_pred.shape=}")
     return y_pred.squeeze(0).numpy()
 
 def _core_isclp(
@@ -195,7 +197,7 @@ def enhance_isclp_kf(
         numFrames=numFrames,
         A=A,
         y_STFT=y_STFT,
-        H_hat_post_STFT=H_hat_post_STFT,
+        H_hat_post_STFT=H_hat_post_STFT.copy(),
         phi_s_hat=phi_s_hat[:,:,0], # choose speaker 0
         Psi_w_delta=Psi_w_delta,
         Psi_w_tilde_init=Psi_w_tilde_init,
@@ -206,13 +208,12 @@ def enhance_isclp_kf(
     phi_dnn = _dnn_psd_estimation(y_STFT)
     if debug_dir:
         spectrogram(phi_dnn, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_dnn.png", title=f"Target PSD estimate (DNN)")
-
     _, _, e_post_dnn_STFT, e_post_dnn_smooth_STFT = _core_isclp(
         N_STFT_half=N_STFT_half,
         numFrames=numFrames,
         A=A,
         y_STFT=y_STFT,
-        H_hat_post_STFT=H_hat_post_STFT,
+        H_hat_post_STFT=H_hat_post_STFT.copy(),
         phi_s_hat=phi_dnn, # (freqbin x frame)
         Psi_w_delta=Psi_w_delta,
         Psi_w_tilde_init=Psi_w_tilde_init,
@@ -225,8 +226,43 @@ def enhance_isclp_kf(
         numFrames=numFrames,
         A=A,
         y_STFT=y_STFT,
-        H_hat_post_STFT=H_hat_post_STFT,
+        H_hat_post_STFT=H_hat_post_STFT.copy(),
         phi_s_hat=psd_true, # (freqbin x frame)
+        Psi_w_delta=Psi_w_delta,
+        Psi_w_tilde_init=Psi_w_tilde_init,
+        beta_ISCLP_KF=beta_ISCLP_KF,
+    )
+
+    # ISCLP-KF-error
+    rng = np.random.default_rng(3)
+    psd_error = np.abs(rng.normal(0, 0.05, size=psd_true.shape))
+    psd_with_error = psd_error + psd_true
+    if debug_dir:
+        spectrogram(psd_with_error, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_err.png", title=f"Oracle PSD with error")
+    _, _, e_post_err_STFT, e_post_err_smooth_STFT = _core_isclp(
+        N_STFT_half=N_STFT_half,
+        numFrames=numFrames,
+        A=A,
+        y_STFT=y_STFT,
+        H_hat_post_STFT=H_hat_post_STFT.copy(),
+        phi_s_hat=psd_with_error, # (freqbin x frame)
+        Psi_w_delta=Psi_w_delta,
+        Psi_w_tilde_init=Psi_w_tilde_init,
+        beta_ISCLP_KF=beta_ISCLP_KF,
+    )
+
+    # ISCLP-KF-lincomb
+    a = 0.02
+    psd_with_lincomb_error = (1-a)*psd_true + a*phi_dnn
+    if debug_dir:
+        spectrogram(psd_with_lincomb_error, scale='pow', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"phi_s_hat_lincomberr.png", title=f"Oracle PSD with lincomb error")
+    _, _, e_post_lincomberr_STFT, e_post_lincomberr_smooth_STFT = _core_isclp(
+        N_STFT_half=N_STFT_half,
+        numFrames=numFrames,
+        A=A,
+        y_STFT=y_STFT,
+        H_hat_post_STFT=H_hat_post_STFT.copy(),
+        phi_s_hat=psd_with_lincomb_error, # (freqbin x frame)
         Psi_w_delta=Psi_w_delta,
         Psi_w_tilde_init=Psi_w_tilde_init,
         beta_ISCLP_KF=beta_ISCLP_KF,
@@ -239,6 +275,10 @@ def enhance_isclp_kf(
         spectrogram(e_post_dnn_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_dnn_smooth.png", title=f"e post Deep-ISCLP-KF, beta = {beta_ISCLP_KF:2f}")
         spectrogram(e_post_oracle_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle.png", title=f"e post ISCLP-KF (Oracle PSD), beta = 0")
         spectrogram(e_post_oracle_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_oracle_smooth.png", title=f"e post ISCLP-KF (Oracle PSD), beta = {beta_ISCLP_KF:2f}")
+        spectrogram(e_post_err_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_err.png", title=f"e post ISCLP-KF (Oracle PSD with error), beta = 0")
+        spectrogram(e_post_err_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_err_smooth.png", title=f"e post ISCLP-KF (Oracle PSD with error), beta = {beta_ISCLP_KF:2f}")
+        spectrogram(e_post_lincomberr_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_lincomberr.png", title=f"e post ISCLP-KF (Oracle PSD with lincomberror), beta = 0")
+        spectrogram(e_post_lincomberr_smooth_STFT, scale='mag', x_tick_prop=x_tick_prop, y_tick_prop=y_tick_prop, c_range=c_range, filename=debug_dir/"e_post_lincomberr_smooth.png", title=f"e post ISCLP-KF (Oracle PSD with lincomberror), beta = {beta_ISCLP_KF:2f}")
 
     e_post_vanilla_TD = istft(e_post_vanilla_STFT, fs)
     e_post_vanilla_smooth_TD = istft(e_post_vanilla_smooth_STFT, fs)
