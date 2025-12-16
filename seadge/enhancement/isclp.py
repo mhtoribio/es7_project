@@ -61,6 +61,7 @@ def _dnn_psd_estimation(y: np.ndarray):
         y_pred_log = _model(features)
         y_pred = torch.expm1(y_pred_log)
 
+    log.debug(f"{features.shape=}, {y.shape=}, {distant_mag.shape=}, {distant_phase.shape=}, {y_pred.shape=}")
     return y_pred.squeeze(0).numpy()
 
 def _core_isclp(
