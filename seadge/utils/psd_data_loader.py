@@ -67,7 +67,7 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
 
     # distant: (K, L, M)
     #re, im = complex_to_re_im(distant)
-    mag = complex_to_mag_phase(distant)
+    mag, _ = complex_to_mag_phase(distant)
     # features: (2K, L, M)
     #features = np.concatenate((re, im))
     features = mag
