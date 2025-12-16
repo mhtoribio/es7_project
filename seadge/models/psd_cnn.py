@@ -14,18 +14,24 @@ class SimplePSDCNN(nn.Module):
         c_hidden = c_in
 
         self.conv1 = nn.Conv2d(
+            in_channels=c_in,
+            out_channels=c_hidden,
+            kernel_size=(3, 3),   # frames x mic
+            padding=(1, 1),
+        )
+        self.conv2 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
             kernel_size=(5, 3),   # frames x mic
             padding=(2, 0),
         )
-        self.conv2 = nn.Conv2d(
+        self.conv3 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
             kernel_size=(11, 3),
             padding=(5, 0),
         )
-        self.conv3 = nn.Conv1d(
+        self.conv4 = nn.Conv1d(
             in_channels=c_hidden,
             out_channels=c_out,
             kernel_size=1,
@@ -35,8 +41,8 @@ class SimplePSDCNN(nn.Module):
         # x_ctx: (B, 2K, L, M)
         # output: (B, K, L, 1)
         x = F.relu(self.conv1(x_ctx))
-        x = F.relu(self.conv2(x)).squeeze(-1)
-        x = self.conv3(x)
-        max_output_val = 2
-        x = max_output_val * torch.sigmoid(x / max_output_val)
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x)).squeeze(-1)
+        x = self.conv4(x)
+        x = torch.sigmoid(x)
         return x
