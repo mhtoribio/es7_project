@@ -23,21 +23,27 @@ class SimplePSDCNN(nn.Module):
             in_channels=c_hidden,
             out_channels=c_hidden,
             kernel_size=(3, 3),   # frames x mic
-            padding=(1, 0),
+            padding=(1, 1),
         )
         self.conv3 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
-            kernel_size=(5, 3),
-            padding=(2, 0),
+            kernel_size=(5, 3),   # frames x mic
+            padding=(2, 1),
         )
-        self.conv4 = nn.Conv1d(
+        self.conv4 = nn.Conv2d(
             in_channels=c_hidden,
             out_channels=c_hidden,
-            kernel_size=3,
-            padding=1,
+            kernel_size=(7, 3),   # frames x mic
+            padding=(3, 0),
         )
-        self.conv5 = nn.Conv1d(
+        self.conv5 = nn.Conv2d(
+            in_channels=c_hidden,
+            out_channels=c_hidden,
+            kernel_size=(9, 3),
+            padding=(4, 0),
+        )
+        self.conv6 = nn.Conv1d(
             in_channels=c_hidden,
             out_channels=c_out,
             kernel_size=1,
@@ -48,8 +54,9 @@ class SimplePSDCNN(nn.Module):
         # output: (B, K, L, 1)
         x = F.relu(self.conv1(x_ctx))
         x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x)).squeeze(-1)
-        x = self.conv4(x)
-        x = self.conv5(x)
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.relu(self.conv5(x)).squeeze(-1)
+        x = self.conv6(x)
         x = torch.sigmoid(x)
         return x
