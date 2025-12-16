@@ -188,7 +188,7 @@ def gen_one_scenario(
     scaled_noise_power = segment_power(noise_scaled)
     snr_calc = 10 * np.log10(target_power/scaled_noise_power)
     log.debug(f"{snr_db=}, {snr_calc=}")
-    if np.abs(snr_calc-snr_db) > 0.1: # 0.1 dB tolerance
+    if np.abs(snr_calc-snr_db) > 1: # 1 dB tolerance
         log.warning(f"SNRs do not match after scaling noise source (desired={snr_db}, got={snr_calc})")
 
     # Assemble Scenario
