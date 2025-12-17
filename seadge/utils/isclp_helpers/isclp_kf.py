@@ -126,7 +126,7 @@ def ISCLP(
         e_prio_conj = np.conj(q) - np.vdot(u, w_hat)  # scalar
 
         # error PSD
-        psi_e = float(np.real(u.conj().T @ (Psi_w_tilde @ u)) + psi_s + eps)
+        psi_e = np.real(u.conj().T @ (Psi_w_tilde @ u)) + psi_s + eps
 
         # gain
         k = (Psi_w_tilde @ u) / psi_e                 # (stateDim,)
