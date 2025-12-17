@@ -168,7 +168,8 @@ def enhance_isclp_kf(
     y_STFT = stft(y, fs, axis=0)
     s_STFT = stft(s, fs, axis=0)
     y_STFT = np.swapaxes(y_STFT, 1, 2)
-    psd_true = np.abs(s_STFT) ** 2
+    psd_true = np.zeros_like(y_STFT[:, :, 0]) # freqbin x frame
+    psd_true[:, :s_STFT.shape[1]] = np.abs(s_STFT) ** 2 # s_STFT may be a frame or two shorter than y_STFT
 
     if debug_dir:
         np.save(debug_dir / "Gamma.npy", Gamma)
