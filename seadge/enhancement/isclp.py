@@ -47,10 +47,12 @@ def _load_psd_model(modelpath: Path, num_freqbins: int, num_mics: int):
     _model.load_state_dict(_saved_model)
 
 def _dnn_psd_estimation(y: np.ndarray):
-    distant_mag, distant_phase = complex_to_mag_phase(y)
+    #distant_mag, distant_phase = complex_to_mag_phase(y)
     # features: (2K, L, M)
-    features = np.concatenate((distant_mag, distant_phase))
+    #features = np.concatenate((distant_mag, distant_phase))
     # features: (1, 2K, L, M)
+    mag, _ = complex_to_mag_phase(y)
+    features = mag
     features = torch.as_tensor(features[None, :, :, :], dtype=torch.float32, device="cpu")
 
     if not _model:

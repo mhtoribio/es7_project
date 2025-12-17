@@ -9,7 +9,7 @@ class SimplePSDCNN(nn.Module):
         super().__init__()
         self.num_freqbins = num_freqbins
 
-        c_in  = 2 * num_freqbins
+        c_in  = num_freqbins
         c_out = num_freqbins
         c_hidden = c_in
 

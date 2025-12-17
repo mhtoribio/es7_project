@@ -64,9 +64,11 @@ def _load_one_npz_for_training(args) -> Tuple[np.ndarray, np.ndarray]:
     distant, early = load_features_and_psd(npz_file, L_max)
 
     # distant: (K, L, M)
-    mag, phase = complex_to_mag_phase(distant)
+    #re, im = complex_to_re_im(distant)
+    mag, _ = complex_to_mag_phase(distant)
     # features: (2K, L, M)
-    features = np.concatenate((mag, phase))
+    #features = np.concatenate((re, im))
+    features = mag
 
     # psd: (K, L)
     psd = np.abs(early) ** 2  # ground truth
