@@ -266,6 +266,12 @@ def main():
 
     # Initialize model
     model = psd_model(num_freqbins=num_freqbins, num_mics=num_mics).to(device)
+    def init_model(m):
+        if isinstance(m, (nn.Conv1d, nn.Conv2d, nn.Linear)):
+            nn.init.kaiming_normal_(m.weight)
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+    model.apply(init_model)
 
     # Wrap with DDP if distributed
     if use_ddp:
