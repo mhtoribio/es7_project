@@ -130,7 +130,7 @@ def train_psd_model(
     )
 
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=weight_decay, lr=lr)
-    criterion = lambda yhat, y: (loss_functions.logpower_mse(yhat, y), None)
+    criterion = lambda yhat, y: (loss_functions.logpower_mae(yhat, y), None)
 
     # -----------------
     # Checkpoint resume (rank 0 decides epoch, all ranks load the same file)
