@@ -78,7 +78,7 @@ def ISCLP(
     for t in range(T):
         # -- load data
         y = y_stack[:, t].astype(cdtype, copy=False)
-        psi_s = float(np.asarray(psi_s_stack[t], dtype=rdtype))
+        psi_s = np.asarray(psi_s_stack[t], dtype=rdtype)
 
         if H_stack.ndim == 2:
             H = H_stack[:, t].reshape(M, 1).astype(cdtype, copy=False)  # (M,1)
