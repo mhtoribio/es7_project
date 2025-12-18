@@ -216,7 +216,7 @@ def _gen_scenarios_for_room(
     scengen_cfg,
     fs: int,
     outpath: Path,
-):
+) -> int:
     """Worker: generate all scenarios for a single room."""
     room = config.load_room(room_path)
     room_key = make_pydantic_cache_key(room)
@@ -229,7 +229,9 @@ def _gen_scenarios_for_room(
     if room.noise_source and len(noise_files) < 1:
         log.error(f"Not enough noise wav files")
 
-    while len(list(files_in_path_recursive(outpath, "*.scenario.json"))) < scengen_cfg.scenarios_per_room:
+    n_ok = 0
+    while n_ok < scengen_cfg.scenarios_per_room:
+        log.debug(f"Generating scenario {n_ok} for room {room_key}")
         scen = gen_one_scenario(
             room,
             wav_files,
@@ -245,10 +247,17 @@ def _gen_scenarios_for_room(
         )
         if scen:
             scen_hash = make_pydantic_cache_key(scen)
-            config.save_json(scen, outpath / f"{scen_hash}.scenario.json")
-            log.debug(f"Successfully generated scenario {scen_hash}")
+            if not (outpath / f"{scen_hash}.scenario.json").exists():
+                config.save_json(scen, outpath / f"{scen_hash}.scenario.json")
+                log.debug(f"Successfully generated scenario {scen_hash}")
+                n_ok += 1
+            else:
+                log.debug("Unlucky scenario collision")
         else:
             log.debug("Failed generating scenario")
+
+    return n_ok  # main process doesn’t strictly need this, but nice to have
+
 
 def gen_scenarios(
     room_dir: Path,
