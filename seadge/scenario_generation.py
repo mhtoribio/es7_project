@@ -231,7 +231,7 @@ def _gen_scenarios_for_room(
 
     n_ok = 0
     while n_ok < scengen_cfg.scenarios_per_room:
-        log.debug(f"Generating scenario {i} for room {room_key}")
+        log.debug(f"Generating scenario {n_ok} for room {room_key}")
         scen = gen_one_scenario(
             room,
             wav_files,
@@ -251,7 +251,7 @@ def _gen_scenarios_for_room(
             log.debug(f"Successfully generated scenario {scen_hash}")
             n_ok += 1
         else:
-            log.error("Failed generating scenario")
+            log.debug("Failed generating scenario")
 
     return n_ok  # main process doesn’t strictly need this, but nice to have
 
