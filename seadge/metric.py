@@ -96,8 +96,101 @@ def _metrics_for_one_scenario(
 
     return scen_hash, results
 
+def _percentiles(v: np.ndarray, ps):
+    """Compat wrapper across NumPy versions."""
+    v = np.asarray(v, dtype=float)
+    try:
+        # NumPy >= 1.22-ish
+        return np.percentile(v, ps, method="linear")
+    except TypeError:
+        # Older NumPy
+        return np.percentile(v, ps, interpolation="linear")
+
+def compute_boxplot_stats(values: list[float]) -> dict[str, float]:
+    """
+    Tukey boxplot (1.5*IQR whiskers), no outliers list.
+    Returns lw,lq,med,uq,uw,mean,n.
+    """
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    n = int(v.size)
+    if n == 0:
+        return {"n": 0, "mean": np.nan, "lw": np.nan, "lq": np.nan, "med": np.nan, "uq": np.nan, "uw": np.nan}
+
+    lq, med, uq = _percentiles(v, [25, 50, 75])
+    iqr = uq - lq
+
+    lo = lq - 1.5 * iqr
+    hi = uq + 1.5 * iqr
+
+    # whiskers: most extreme points still within fences
+    lw = float(np.min(v[v >= lo])) if np.any(v >= lo) else float(np.min(v))
+    uw = float(np.max(v[v <= hi])) if np.any(v <= hi) else float(np.max(v))
+
+    return {
+        "n": n,
+        "mean": float(np.mean(v)),
+        "lw": lw,
+        "lq": float(lq),
+        "med": float(med),
+        "uq": float(uq),
+        "uw": uw,
+    }
+
+def write_boxplot_stats_for_metric(metric_csv: Path, out_csv: Path):
+    """
+    Input: your per-metric file like dnsmos_ovrl_mos.csv:
+        scen,target,distant,...
+        <hash>,3.0,1.8,...
+        ...
+    Output: one row per algorithm:
+        alg,n,mean,lw,lq,med,uq,uw
+    """
+    with metric_csv.open("r", newline="") as f:
+        r = csv.reader(f)
+        header = next(r)
+        if len(header) < 2 or header[0] != "scen":
+            raise ValueError(f"Unexpected header in {metric_csv}: {header}")
+
+        algs = header[1:]
+        cols = {alg: [] for alg in algs}
+
+        for row in r:
+            # row[0] is scen hash
+            for j, alg in enumerate(algs, start=1):
+                if j >= len(row):
+                    continue
+                s = row[j].strip()
+                if not s:
+                    continue
+                try:
+                    cols[alg].append(float(s))
+                except ValueError:
+                    # keep going if any weird token appears
+                    continue
+
+    log.debug(f"Writing metric file {out_csv}")
+    with out_csv.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["alg", "n", "mean", "lw", "lq", "med", "uq", "uw"])
+        for alg in algs:
+            stats = compute_boxplot_stats(cols[alg])
+            w.writerow([alg, stats["n"], stats["mean"], stats["lw"], stats["lq"], stats["med"], stats["uq"], stats["uw"]])
+
+def write_all_boxplot_stats(metrics_dir: Path):
+    """
+    For every <metric>.csv in metrics_dir, create <metric>_boxstats.csv.
+    Skips files that already look like stats outputs.
+    """
+    for metric_csv in metrics_dir.glob("*.csv"):
+        name = metric_csv.stem
+        if name.endswith("_boxstats"):
+            continue
+        out_csv = metrics_dir / f"{name}_boxstats.csv"
+        write_boxplot_stats_for_metric(metric_csv, out_csv)
+
 def write_metrics_csv(outdir: Path, results: dict[str, dict[str, dict[str, float]]]):
-    preferred_alg_order = ["target", "distant"]
+    preferred_alg_order = ["target", "distant", "isclp-kf", "isclp-kf-smooth", "deep-isclp-kf", "deep-isclp-kf-smooth", "oracle-isclp-kf", "oracle-isclp-kf-smooth"]
     def order_algorithms(seen):
         # keep preferred order first, then any extras sorted
         extras = sorted(set(seen) - set(preferred_alg_order))
@@ -182,6 +275,7 @@ def compute_all_metrics(
             json.dump(results, f)
 
     write_metrics_csv(outdir, results)
+    write_all_boxplot_stats(outdir) # compute stats for each csv file (must be called after write_metrics_csv)
 
 def main():
     cfg = config.get()
