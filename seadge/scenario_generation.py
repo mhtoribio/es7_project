@@ -230,7 +230,7 @@ def _gen_scenarios_for_room(
         log.error(f"Not enough noise wav files")
 
     n_ok = 0
-    for i in range(scengen_cfg.scenarios_per_room):
+    while n_ok < scengen_cfg.scenarios_per_room:
         log.debug(f"Generating scenario {i} for room {room_key}")
         scen = gen_one_scenario(
             room,
