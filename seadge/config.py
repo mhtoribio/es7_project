@@ -231,7 +231,6 @@ class ScenarioGenCfg(BaseModel):
 
 class LearningCfg(BaseModel):
     epochs: int = 50
-    hidden_size: int = 256
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5
     batch_size: int = 8
