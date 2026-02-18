@@ -235,7 +235,6 @@ class LearningCfg(BaseModel):
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5
     batch_size: int = 8
-    num_workers: int = 4
     num_max_npz_files: int = 0
 
 class Config(BaseSettings):
